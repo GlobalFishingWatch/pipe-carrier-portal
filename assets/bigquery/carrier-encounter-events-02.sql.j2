@@ -1,0 +1,111 @@
+#standardSQL
+{% include 'util.sql.j2' %}
+WITH
+  --
+  -- Declare all source tables we are going to be using
+  --
+  source_complete_encounter_with_authorizations AS (
+    SELECT
+      *
+    FROM
+      `{{ complete_encounter_with_authorizations }}`
+  ),
+  --
+  -- Duplicate encounters so that we have an event for each vessel.
+  --
+  duplicate_encounters AS (
+  SELECT
+    carrier_vessel_id AS vessel_id,
+    fishing_vessel_id AS encountered_vessel_id,
+    CONCAT(TO_HEX(MD5(preliminary_event_id)), ".1") AS event_id,
+    *
+  FROM
+    source_complete_encounter_with_authorizations
+  UNION ALL
+  SELECT
+    fishing_vessel_id AS vessel_id,
+    carrier_vessel_id AS encountered_vessel_id,
+    CONCAT(TO_HEX(MD5(preliminary_event_id)), ".2") AS event_id,
+    *
+  FROM
+    source_complete_encounter_with_authorizations),
+  --
+  -- Main events query
+  --
+  results AS (
+  SELECT
+    event_id,
+    'encounter' AS event_type,
+    vessel_id,
+    start_time AS event_start,
+    end_time AS event_end,
+    mean_latitude AS lat_mean,
+    mean_longitude AS lon_mean,
+    mean_latitude AS lat_min,
+    mean_latitude AS lat_max,
+    mean_longitude AS lon_min,
+    mean_longitude AS lon_max,
+    TO_JSON_STRING( STRUCT(
+        ROUND(median_distance_km,3) AS median_distance_km,
+        ROUND(median_speed_knots,3) AS median_speed_knots,
+        encountered_vessel_id,
+        elevation_m,
+        distance_from_shore_m,
+        distance_from_port_m,
+        is_authorized,
+        authorization_status,
+        STRUCT(regions.eez,
+          regions.fao,
+          regions.rfmo
+        ) AS regions
+    ) ) AS event_info,
+    TO_JSON_STRING([
+      STRUCT(
+        carrier_vessel_id AS `id`,
+        'carrier' AS `type`,
+        carrier_ssvid AS `ssvid`,
+        carrier_shipname AS `name`,
+        carrier_flag AS `flag`,
+        carrier_vessel_region_authorizations AS authorizations,
+        STRUCT(
+          carrier_trip_start_anchorage_id AS anchorage_id,
+          generate_port_id(carrier_trip_start_iso3, carrier_trip_start_label) AS port_id,
+          carrier_trip_start_iso3 AS iso,
+          carrier_trip_start_label AS label
+        ) AS origin_port,
+        STRUCT(
+          carrier_trip_end_anchorage_id AS anchorage_id,
+          generate_port_id(carrier_trip_end_iso3, carrier_trip_end_label) AS port_id,
+          carrier_trip_end_iso3 AS iso,
+          carrier_trip_end_label AS label
+        ) AS destination_port
+      ),
+      STRUCT(
+        fishing_vessel_id AS `id`,
+        'fishing' AS `type`,
+        fishing_ssvid AS `ssvid`,
+        fishing_shipname AS `name`,
+        fishing_flag AS `flag`,
+        fishing_vessel_region_authorizations AS authorizations,
+        STRUCT(
+          fishing_trip_start_anchorage_id AS anchorage_id,
+          generate_port_id(fishing_trip_start_iso3, fishing_trip_start_label) AS port_id,
+          fishing_trip_start_iso3 AS iso,
+          fishing_trip_start_label AS label
+        ) AS origin_port,
+        STRUCT(
+          fishing_trip_end_anchorage_id AS anchorage_id,
+          generate_port_id(fishing_trip_end_iso3, fishing_trip_end_label) AS port_id,
+          fishing_trip_end_iso3 AS iso,
+          fishing_trip_end_label AS label
+        ) AS destination_port
+      )
+    ]) AS event_vessels,
+    ST_GEOGFROMTEXT(CONCAT('POINT (', CAST(mean_longitude AS string), ' ', CAST(mean_latitude AS string), ')')) AS event_geography
+  FROM
+    duplicate_encounters)
+
+SELECT
+  *
+FROM
+  results

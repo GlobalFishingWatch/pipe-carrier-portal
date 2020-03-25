@@ -1,0 +1,129 @@
+#!/bin/bash
+source pipe-tools-utils
+
+THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+# source ${THIS_SCRIPT_DIR}/pipeline.sh
+ASSETS=${THIS_SCRIPT_DIR}/../assets
+ARGS=( \
+  SOURCE_TABLE \
+  SOURCE_FILTER \
+  VESSEL_INFO \
+  VESSEL_DATABASE \
+  SPATIAL_MEASURES \
+  COUNTRY_CODES \
+  VOYAGES \
+  NAMED_ANCHORAGES \
+  FISHING_VESSELS \
+  MAX_MEDIAN_SPEED_KNOTS \
+  TEMP_DATASET
+  DEST_TABLE \
+)
+
+################################################################################
+# Validate and extract arguments
+################################################################################
+display_usage() {
+  echo -e "\nUsage:\n$0 SOURCE_TABLE SOURCE_FILTER VESSEL_INFO VESSEL_DATABASE SPATIAL_MEASURES COUNTRY_CODES VOYAGES NAMED_ANCHORAGES FISHING_VESSELS MAX_MEDIAN_SPEED_KNOTS TEMP_DATASET DEST_TABLE"
+}
+
+if [[ $# -ne ${#ARGS[@]} ]]
+then
+    display_usage
+    exit 1
+fi
+
+ARG_VALUES=("$@")
+PARAMS=()
+for index in ${!ARGS[*]}; do
+  echo "${ARGS[$index]}=${ARG_VALUES[$index]}"
+  declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
+done
+
+echo "Running $0"
+echo "  SOURCE_TABLE: $SOURCE_TABLE"
+echo "  SOURCE_FILTER: $SOURCE_FILTER"
+echo "  VESSEL_INFO: $VESSEL_INFO"
+echo "  VESSEL_DATABASE: $VESSEL_DATABASE"
+echo "  SPATIAL_MEASURES: $SPATIAL_MEASURES"
+echo "  COUNTRY_CODES: $COUNTRY_CODES"
+echo "  VOYAGES: $VOYAGES"
+echo "  NAMED_ANCHORAGES: $NAMED_ANCHORAGES"
+echo "  FISHING_VESSELS: $FISHING_VESSELS"
+echo "  MAX_MEDIAN_SPEED_KNOTS: $MAX_MEDIAN_SPEED_KNOTS"
+echo "  TEMP_DATASET: $TEMP_DATASET"
+echo "  DEST_TABLE: $DEST_TABLE"
+################################################################################
+# Force that the destination table exists
+################################################################################
+echo "Ensuring events table ${DEST_TABLE} exists"
+TABLE_DESC=(
+  "* Pipeline: ${PIPELINE} ${PIPELINE_VERSION}"
+  "* Source: ${SOURCE_TABLE}"
+  "* Command:"
+  "$(basename $0)"
+  "$@"
+)
+TABLE_DESC=$( IFS=$'\n'; echo "${TABLE_DESC[*]}" )
+SCHEMA=${ASSETS}/bigquery/events.schema.json
+bq mk --force \
+  --description "${TABLE_DESC}" \
+  ${DEST_TABLE}
+
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to create table ${DEST_TABLE}"
+  exit 1
+fi
+echo "  Events table exists"
+
+################################################################################
+# First generate intermediate encounter results into a temp table
+################################################################################
+echo "Generating intermediate results table"
+UUID=$(uuidgen)
+INTERMEDIATE_TABLE="${TEMP_DATASET}.${UUID//-/_}"
+SQL=${ASSETS}/bigquery/carrier-encounter-events-01.sql.j2
+jinja2 ${SQL} \
+  -D source_table=${SOURCE_TABLE//:/.} \
+  -D source_filter=${SOURCE_FILTER} \
+  -D vessel_info=${VESSEL_INFO//:/.} \
+  -D vessel_database=${VESSEL_DATABASE//:/.} \
+  -D spatial_measures=${SPATIAL_MEASURES//:/.} \
+  -D country_codes=${COUNTRY_CODES//:/.} \
+  -D voyages=${VOYAGES//:/.} \
+  -D named_anchorages=${NAMED_ANCHORAGES//:/.} \
+  -D fishing_vessels=${FISHING_VESSELS//:/.} \
+  -D max_median_speed_knots=${MAX_MEDIAN_SPEED_KNOTS} \
+  | bq query --max_rows=0 --allow_large_results --replace --destination_table ${INTERMEDIATE_TABLE}
+
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to insert records for table ${INTERMEDIATE_TABLE}"
+  exit 1
+fi
+
+################################################################################
+# Run the actual results query which converts the intermediate results into
+# real data
+################################################################################
+echo "Processing intermediate results"
+SQL=${ASSETS}/bigquery/carrier-encounter-events-02.sql.j2
+jinja2 ${SQL} \
+  -D complete_encounter_with_authorizations=${INTERMEDIATE_TABLE} \
+  | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
+
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to insert records for table ${DEST_TABLE}"
+  exit 1
+fi
+
+################################################################################
+# Remove the intermediate results table
+################################################################################
+echo "Deleting intermediate results table"
+bq rm -t -f ${INTERMEDIATE_TABLE}
+
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to remove intermediate table ${INTERMEDIATE_TABLE}"
+  exit 1
+fi
+
+echo "${DEST_TABLE} Done."
