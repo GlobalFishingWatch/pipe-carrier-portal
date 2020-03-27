@@ -13,32 +13,32 @@ WITH
   SELECT
     *
   FROM
-    `proj_carrier_portal_pew.carrier_portal_published_events_encounters_v20191209` ),
+    `{{ encounter_events }}` ),
   source_published_events_loitering AS (
   SELECT
     *
   FROM
-    `proj_carrier_portal_pew.carrier_portal_published_events_loitering_v20191209` ),
+    `{{ loitering_events }}` ),
   source_vessel_info AS (
   SELECT
     *
   FROM
-    `pipe_production_v20190502.vessel_info` ),
+    `{{ vessel_info }}` ),
   source_vessel_database AS (
   SELECT
     *
   FROM
-    `gfw_research.named_anchorages` ),
+    `{{ vessel_database }}` ),
   source_port_events AS (
   SELECT
     *
   FROM
-    `pipe_production_v20190502.port_visits_*` ),
+    `{{ port_visits }}` ),
   source_named_anchorages AS (
   SELECT
     *
   FROM
-    `gfw_research.named_anchorages` ),
+    `{{ named_anchorages }}` ),
   --
   -- Select all unique vessel ids. This is required because each vessel may
   -- participate in multiple encounters, or may participate as a carrier in
@@ -65,13 +65,15 @@ WITH
     source_port_events
   WHERE
     ---removed start and end time entries and temporarily filled with real ones
-    start_timestamp BETWEEN '2016-01-01'
-    AND '2019-11-01'
+    start_timestamp BETWEEN '2017-01-01' AND '2020-01-01'
     AND vessel_id IN (
     SELECT
       vessel_id
     FROM
       all_unique_vessel_ids) ),
+  --
+  --
+  --
   port_stop_gaps_onvoyages AS (
   SELECT
     * EXCEPT(s2id),
@@ -155,6 +157,9 @@ WITH
     19,
     20,
     21),
+  --
+  --
+  --
   get_port_stops AS (
   SELECT
     *
@@ -163,6 +168,9 @@ WITH
   WHERE
     event_type IN ('PORT_STOP_BEGIN',
       'PORT_STOP_END')),
+  --
+  --
+  --
   calc_stop_duration AS (
   SELECT
     *,
@@ -188,6 +196,9 @@ WITH
         get_port_stops)
     WHERE
       event_type = 'PORT_STOP_BEGIN' )),
+  --
+  --
+  --
   longest_port_stop AS (
   SELECT
     vessel_id,
@@ -261,7 +272,9 @@ WITH
         AND a.stop_duration_f = b.max_stop_duration )
     WHERE
       Dups IS NULL ) ),
-  --SELECT * FROM port_stop_gaps_onvoyages WHERE voyage_id NOT IN (SELECT voyage_id FROM longest_port_stop)
+  --
+  --
+  --
   port_gap_visits AS (
   SELECT
     *
@@ -277,6 +290,9 @@ WITH
         unique_id
       FROM
         longest_port_stop) )),
+  --
+  --
+  --
   port_gap_voyage_ends AS (
   SELECT
     vessel_id,
@@ -316,6 +332,9 @@ WITH
   ON
     a.unique_id = b.unique_id1
     AND a.timestamp = b.min_timestamp),
+  --
+  --
+  --
   port_labels_clean AS (
   SELECT
     *
@@ -376,6 +395,9 @@ WITH
       12,
       13,
       14)),
+  --
+  --
+  --
   port_entry_merged_info AS(
   SELECT
     *
@@ -393,6 +415,9 @@ WITH
       port_entries)b
   ON
     a.unique_id=b.unique_id1),
+  --
+  --
+  --
   complete_port_event AS (
   SELECT
     event.vessel_id AS vessel_id,
@@ -422,7 +447,10 @@ WITH
   LEFT JOIN
     port_entry_merged_info AS anchorage
   ON
-    event.unique_id = anchorage.unique_id)
+    event.unique_id = anchorage.unique_id
+  WHERE
+    TIMESTAMP_DIFF(event.end_timestamp, event.start_timestamp, SECOND)/3600 > {{ min_stop_length }}
+  )
   --
   -- Finally, generate a unique event id and write out in the normalized event schema
   --
