@@ -11,6 +11,23 @@ WITH
       `{{ complete_encounter_with_authorizations }}`
   ),
   --
+  -- Due to some issues we are currently having with the voyages table, some of
+  -- the events are duplicated because they are matching to multiple
+  -- overlapping voyages. We dedup them here at the end
+  complete_encounter_events_with_ranks AS (
+  SELECT
+    event.*,
+    ROW_NUMBER() OVER (PARTITION BY preliminary_event_id) AS `rank`
+  FROM
+    source_complete_encounter_with_authorizations AS event ),
+  deduplicated_complete_encounter_events AS (
+  SELECT
+    * EXCEPT(`rank`)
+  FROM
+    complete_encounter_events_with_ranks
+  WHERE
+    `rank` = 1 ),
+  --
   -- Duplicate encounters so that we have an event for each vessel.
   --
   duplicate_encounters AS (
@@ -20,7 +37,7 @@ WITH
     CONCAT(TO_HEX(MD5(preliminary_event_id)), ".1") AS event_id,
     *
   FROM
-    source_complete_encounter_with_authorizations
+    deduplicated_complete_encounter_events
   UNION ALL
   SELECT
     fishing_vessel_id AS vessel_id,
@@ -28,7 +45,7 @@ WITH
     CONCAT(TO_HEX(MD5(preliminary_event_id)), ".2") AS event_id,
     *
   FROM
-    source_complete_encounter_with_authorizations),
+    deduplicated_complete_encounter_events),
   --
   -- Main events query
   --

@@ -12,6 +12,7 @@ ARGS=( \
   SOURCE_VOYAGES \
   SOURCE_NAMED_ANCHORAGES \
   SOURCE_SEGS \
+  SOURCE_VESSEL_DATABASE \
   DEST_TABLE \
 )
 
@@ -19,7 +20,8 @@ ARGS=( \
 # Validate and extract arguments
 ################################################################################
 display_usage() {
-  echo -e "\nUsage:\n$0 SOURCE_RAW_LOITERING_EVENTS SOURCE_SEGMENT_INFO SOURCE_SPATIAL_MEASURES SOURCE_COUNTRY_CODES SOURCE_VOYAGES SOURCE_NAMED_ANCHORAGES SOURCE_SEGS DEST_TABLE"
+  ARG_NAMES=$(echo "${ARGS[*]}")
+  echo -e "\nUsage:\n$0 $ARG_NAMES\n"
 }
 
 if [[ $# -ne ${#ARGS[@]} ]]
@@ -28,22 +30,12 @@ then
     exit 1
 fi
 
+echo "Running $0"
 ARG_VALUES=("$@")
-PARAMS=()
 for index in ${!ARGS[*]}; do
-  echo "${ARGS[$index]}=${ARG_VALUES[$index]}"
+  echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
-
-echo "Running $0"
-echo "  SOURCE_RAW_LOITERING_EVENTS: $SOURCE_RAW_LOITERING_EVENTS"
-echo "  SOURCE_SEGMENT_INFO: $SOURCE_SEGMENT_INFO"
-echo "  SOURCE_SPATIAL_MEASURES: $SOURCE_SPATIAL_MEASURES"
-echo "  SOURCE_COUNTRY_CODES: $SOURCE_COUNTRY_CODES"
-echo "  SOURCE_VOYAGES: $SOURCE_VOYAGES"
-echo "  SOURCE_NAMED_ANCHORAGES: $SOURCE_NAMED_ANCHORAGES"
-echo "  SOURCE_SEGS: $SOURCE_SEGS"
-echo "  DEST_TABLE: $DEST_TABLE"
 ################################################################################
 # Force that the destination table exists
 ################################################################################
@@ -80,6 +72,7 @@ jinja2 ${SQL} \
   -D voyages=${SOURCE_VOYAGES//:/.} \
   -D named_anchorages=${SOURCE_NAMED_ANCHORAGES//:/.} \
   -D segs=${SOURCE_SEGS//:/.} \
+  -D vessel_database=${SOURCE_VESSEL_DATABASE//:/.} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
 
 if [ "$?" -ne 0 ]; then

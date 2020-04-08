@@ -9,6 +9,7 @@ ARGS=( \
   SOURCE_LOITERING_EVENTS \
   SOURCE_VESSEL_INFO \
   SOURCE_VESSEL_DATABASE \
+  SOURCE_SPATIAL_MEASURES \
   SOURCE_PORT_VISITS \
   SOURCE_NAMED_ANCHORAGES \
   MIN_STOP_LENGTH \
@@ -19,7 +20,8 @@ ARGS=( \
 # Validate and extract arguments
 ################################################################################
 display_usage() {
-  echo -e "\nUsage:\n$0 SOURCE_ENCOUNTER_EVENTS SOURCE_LOITERING_EVENTS SOURCE_VESSEL_INFO SOURCE_VESSEL_DATABASE SOURCE_PORT_VISITS SOURCE_NAMED_ANCHORAGES MIN_STOP_LENGTH DEST_TABLE"
+  ARG_NAMES=$(echo "${ARGS[*]}")
+  echo -e "\nUsage:\n$0 $ARG_NAMES\n"
 }
 
 if [[ $# -ne ${#ARGS[@]} ]]
@@ -28,22 +30,12 @@ then
     exit 1
 fi
 
+echo "Running $0"
 ARG_VALUES=("$@")
-PARAMS=()
 for index in ${!ARGS[*]}; do
-  echo "${ARGS[$index]}=${ARG_VALUES[$index]}"
+  echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
-
-echo "Running $0"
-echo "  SOURCE_ENCOUNTER_EVENTS: $SOURCE_ENCOUNTER_EVENTS"
-echo "  SOURCE_LOITERING_EVENTS: $SOURCE_LOITERING_EVENTS"
-echo "  SOURCE_VESSEL_INFO: $SOURCE_VESSEL_INFO"
-echo "  SOURCE_VESSEL_DATABASE: $SOURCE_VESSEL_DATABASE"
-echo "  SOURCE_PORT_VISITS: $SOURCE_PORT_VISITS"
-echo "  SOURCE_NAMED_ANCHORAGES: $SOURCE_NAMED_ANCHORAGES"
-echo "  MIN_STOP_LENGTH: $MIN_STOP_LENGTH"
-echo "  DEST_TABLE: $DEST_TABLE"
 ################################################################################
 # Force that the destination table exists
 ################################################################################
@@ -79,6 +71,7 @@ jinja2 ${SQL} \
   -D vessel_database=${SOURCE_VESSEL_DATABASE//:/.} \
   -D port_visits=${SOURCE_PORT_VISITS//:/.} \
   -D named_anchorages=${SOURCE_NAMED_ANCHORAGES//:/.} \
+  -D spatial_measures=${SOURCE_SPATIAL_MEASURES//:/.} \
   -D min_stop_length=${MIN_STOP_LENGTH} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
 

@@ -17,7 +17,8 @@ ARGS=( \
 # Validate and extract arguments
 ################################################################################
 display_usage() {
-  echo -e "\nUsage:\n$0 YYYY-MM-DD SOURCE TEMP_BUCKET DEST_INSTANCE DEST_CONNECTION_STRING DEST_TABLE DEST_EVENT_TYPE\n"
+  ARG_NAMES=$(echo "${ARGS[*]}")
+  echo -e "\nUsage:\n$0 $ARG_NAMES\n"
 }
 
 if [[ $# -ne ${#ARGS[@]} ]]
@@ -26,24 +27,12 @@ then
     exit 1
 fi
 
+echo "Running $0"
 ARG_VALUES=("$@")
-PARAMS=()
 for index in ${!ARGS[*]}; do
-  echo "${ARGS[$index]}=${ARG_VALUES[$index]}"
+  echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
-
-
-TEMP_PATH=gs://${TEMP_BUCKET}/pipe-events/$( date -u "+%FT%T.%N" )
-
-echo "Running $0"
-echo "  START_DATE: $START_DATE"
-echo "  SOURCE: $SOURCE"
-echo "  TEMP_BUCKET: $TEMP_BUCKET"
-echo "  DEST_INSTANCE: $DEST_INSTANCE"
-echo "  DEST_CONNECTION_STRING: $DEST_CONNECTION_STRING"
-echo "  DEST_TABLE: $DEST_TABLE"
-echo "  DEST_EVENT_TYPE: $DEST_EVENT_TYPE"
 ################################################################################
 # Export events to json files
 ################################################################################

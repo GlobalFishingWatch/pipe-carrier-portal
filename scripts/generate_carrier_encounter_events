@@ -23,7 +23,8 @@ ARGS=( \
 # Validate and extract arguments
 ################################################################################
 display_usage() {
-  echo -e "\nUsage:\n$0 SOURCE_TABLE SOURCE_FILTER VESSEL_INFO VESSEL_DATABASE SPATIAL_MEASURES COUNTRY_CODES VOYAGES NAMED_ANCHORAGES FISHING_VESSELS MAX_MEDIAN_SPEED_KNOTS TEMP_DATASET DEST_TABLE"
+  ARG_NAMES=$(echo "${ARGS[*]}")
+  echo -e "\nUsage:\n$0 $ARG_NAMES\n"
 }
 
 if [[ $# -ne ${#ARGS[@]} ]]
@@ -32,26 +33,12 @@ then
     exit 1
 fi
 
+echo "Running $0"
 ARG_VALUES=("$@")
-PARAMS=()
 for index in ${!ARGS[*]}; do
-  echo "${ARGS[$index]}=${ARG_VALUES[$index]}"
+  echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
-
-echo "Running $0"
-echo "  SOURCE_TABLE: $SOURCE_TABLE"
-echo "  SOURCE_FILTER: $SOURCE_FILTER"
-echo "  VESSEL_INFO: $VESSEL_INFO"
-echo "  VESSEL_DATABASE: $VESSEL_DATABASE"
-echo "  SPATIAL_MEASURES: $SPATIAL_MEASURES"
-echo "  COUNTRY_CODES: $COUNTRY_CODES"
-echo "  VOYAGES: $VOYAGES"
-echo "  NAMED_ANCHORAGES: $NAMED_ANCHORAGES"
-echo "  FISHING_VESSELS: $FISHING_VESSELS"
-echo "  MAX_MEDIAN_SPEED_KNOTS: $MAX_MEDIAN_SPEED_KNOTS"
-echo "  TEMP_DATASET: $TEMP_DATASET"
-echo "  DEST_TABLE: $DEST_TABLE"
 ################################################################################
 # Force that the destination table exists
 ################################################################################
