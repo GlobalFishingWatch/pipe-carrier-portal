@@ -1,0 +1,94 @@
+#standardSQL
+WITH
+  --
+  -- Declare the source tables we are going to use through the entire query
+  --
+  source_published_events_encounters AS (
+  SELECT
+    *
+  FROM
+    `{{ encounter_events }}` ),
+  source_published_events_loitering AS (
+  SELECT
+    *
+  FROM
+    `{{ loitering_events }}` ),
+  source_messages AS (
+  SELECT
+    *
+  FROM
+    `{{ messages }}`
+  WHERE
+    _PARTITIONTIME BETWEEN '{{start}}'
+    AND '{{end}}' ),
+  source_segment_info AS (
+  SELECT
+    *
+  FROM
+    `{{ segment_info }}`),
+  source_segment_vessel AS (
+  SELECT
+    *
+  FROM
+    `{{ segment_vessel }}`),
+  --
+  -- Select all unique vessel ids from the encounters. This is required because
+  -- each vessel may participate in multiple encounters, or may participate as
+  -- a carrier in some and as a donnor in other (in carrier-carrier encounters)
+  --
+  all_unique_vessel_ids AS (
+  SELECT
+    DISTINCT vessel_id
+  FROM
+    source_published_events_encounters
+  UNION DISTINCT
+  SELECT
+    DISTINCT vessel_id
+  FROM
+    source_published_events_loitering),
+  --
+  -- Select all the messages for the vessel ids we detected previously
+  --
+  positions AS (
+  SELECT
+    sv.seg_id,
+    sv.vessel_id,
+    m.timestamp,
+    ST_GEOGPOINT(m.lon,
+      m.lat) AS position,
+    IFNULL(m.nnet_score,
+      m.logistic_score) AS score,
+    m.implied_speed_knots AS speed,
+    m.course
+  FROM
+    source_messages AS m
+  INNER JOIN
+    source_segment_info AS si
+  USING
+    (seg_id)
+  INNER JOIN
+    source_segment_vessel AS sv
+  USING
+    (seg_id)
+  WHERE
+    si.noise = FALSE
+    AND si.pos_count > 5
+    AND m.lat IS NOT NULL
+    AND m.lon IS NOT NULL
+    AND sv.vessel_id IN (
+    SELECT
+      vessel_id
+    FROM
+      all_unique_vessel_ids)
+    AND sv.vessel_id_rank = 1)
+SELECT
+  seg_id,
+  vessel_id,
+  timestamp,
+  position,
+  score,
+  speed,
+  course
+FROM
+  positions
+

@@ -1,0 +1,256 @@
+#standardSQL
+{% include 'util.sql.j2' %}
+WITH
+  --
+  -- Declare the source tables we are going to use through the entire query
+  --
+  source_published_events_encounters AS (
+  SELECT
+    *
+  FROM
+    `{{ encounter_events }}` ),
+  source_published_events_loitering AS (
+  SELECT
+    *
+  FROM
+    `{{ loitering_events }}` ),
+  source_vessel_info AS (
+  SELECT
+    *
+  FROM
+    `{{ vessel_info }}` ),
+  source_vessel_database AS (
+  SELECT
+    *
+  FROM
+    `{{ vessel_database }}` ),
+  source_country_codes AS (
+  SELECT
+    *
+  FROM
+    `{{ country_codes }}` ),
+  source_research_vessel_info AS (
+  SELECT
+    *
+  FROM
+    `{{ vi_ssvid_by_year }}` ),
+  --
+  -- Fetch all the vessel ids from all the loitering and encounter events
+  --
+  source_events AS (
+  SELECT
+    vessel_id,
+    event_start,
+    event_end
+  FROM
+    source_published_events_encounters
+  UNION ALL
+  SELECT
+    vessel_id,
+    event_start,
+    event_end
+  FROM
+    source_published_events_loitering),
+  --
+  -- For every event, pull data from the vessel database and the vessel
+  -- info tables for all of the carriers
+  --
+  carrier_vessels AS (
+  SELECT
+    event.vessel_id AS carrier_vessel_id,
+    vessel_database.identity.ssvid AS carrier_mmsi,
+    vessel_database.identity.imo AS carrier_imo,
+    -- shipname and callsign are taken from vessel info because the vessel
+    -- database only has normalized values.
+    vessel_info.shipname.value AS carrier_shipname,
+    vessel_info.callsign.value AS carrier_callsign,
+    vessel_database.feature.length_m AS carrier_length_m,
+    -- TODO: Expand vessel_database.registry.beam_m as carrier_width_m and get
+    -- the most correct value, maybe through averages? In the meantime we are
+    -- taking the value that the vessel reports on AIS
+    NULL AS carrier_width_m,
+    vessel_database.feature.tonnage_gt AS carrier_gross_tonnage,
+    -- This structure extracts the UVI (which encodes the RFMO), and the
+    -- authorization dates from the array of registry information, generating a
+    -- new array which tells for each registry their authorization dates.
+    ARRAY(
+    SELECT
+      STRUCT(
+        -- We need to extract the actual RFMO value which is encoded in the registry list_uvi field
+        extract_rfmo_from_list_uvi(list_uvi) AS `value`,
+        FORMAT_TIMESTAMP("%Y-%m-%d", authorized_from) AS `start`,
+        FORMAT_TIMESTAMP("%Y-%m-%d", authorized_to) AS `end`)
+    FROM
+      UNNEST(vessel_database.registry)
+    WHERE
+      -- Only include authorizations records from whitelisted rfmos
+      is_whitelisted_rfmo(extract_rfmo_from_list_uvi(list_uvi))
+      AND authorized_from IS NOT NULL
+      AND authorized_to IS NOT NULL
+    GROUP BY
+      list_uvi,
+      authorized_from,
+      authorized_to ) AS carrier_authorizations
+  FROM
+    source_events AS event
+  INNER JOIN
+    source_vessel_info AS vessel_info
+  USING
+    (vessel_id)
+  INNER JOIN
+    source_vessel_database AS vessel_database
+  ON
+    vessel_info.ssvid = vessel_database.identity.ssvid
+  WHERE
+    vessel_database.matched
+    AND vessel_database.is_carrier
+    AND event.event_start > (
+    SELECT
+      MIN(first_timestamp)
+    FROM
+      vessel_database.activity)
+    AND event.event_end < (
+    SELECT
+      MAX(last_timestamp)
+    FROM
+      vessel_database.activity)),
+  --
+  -- Generate a list of all the vessel ids from carriers to filter the fishing vessels later
+  --
+  carrier_vessel_ids AS (
+  SELECT
+    DISTINCT carrier_vessel_id AS vessel_id
+  FROM
+    carrier_vessels ),
+  --
+  -- Select all fishing vessels participating in the events. These are all vessels that are not a carrier.
+  --
+  fishing_vessels AS (
+  SELECT
+    vessel_id AS fishing_vessel_id,
+    research_vessel_info.best.best_vessel_class AS gear_type
+  FROM
+    source_events AS event
+  INNER JOIN
+    source_vessel_info AS vessel_info
+  USING
+    (vessel_id)
+  LEFT JOIN
+    source_research_vessel_info AS research_vessel_info
+  ON
+    EXTRACT(year
+    FROM
+      event.event_start) = research_vessel_info.year
+    AND vessel_info.ssvid = research_vessel_info.ssvid
+  WHERE
+    event.vessel_id NOT IN (
+    SELECT
+      vessel_id
+    FROM
+      carrier_vessel_ids) ),
+  --
+  -- Select all unique vessel ids. This is required because each vessel may
+  -- participate in multiple events
+  --
+  all_vessels AS (
+  SELECT
+    DISTINCT vessel_id
+  FROM
+    source_events),
+  --
+  -- For each vessel id, try to fetch both the carrier and fishing vessel information. Only one of the two will match.
+  --
+  full_vessel_info AS (
+  SELECT
+    ids.vessel_id AS vessel_id,
+    vessel_info.first_timestamp AS first_timestamp,
+    vessel_info.last_timestamp AS last_timestamp,
+  IF
+    (carrier_info.carrier_vessel_id IS NULL,
+      "vessel",
+      "carrier") AS type,
+    IFNULL(CAST(carrier_info.carrier_mmsi AS string),
+      vessel_info.ssvid) AS mmsi,
+    IFNULL(CAST(carrier_info.carrier_imo AS string),
+      vessel_info.imo.value) AS imo,
+    IFNULL(carrier_info.carrier_shipname,
+      vessel_info.shipname.value) AS shipname,
+    IFNULL(carrier_info.carrier_callsign,
+      vessel_info.callsign.value ) AS callsign,
+    IFNULL(carrier_info.carrier_length_m,
+      CAST(vessel_info.length.value AS int64)) AS length_m,
+    IFNULL(carrier_info.carrier_width_m,
+      CAST(vessel_info.width.value AS int64)) AS width_m,
+    carrier_info.carrier_gross_tonnage AS gross_tonnage,
+    carrier_info.carrier_authorizations AS authorizations,
+    fishing_info.gear_type AS gear_type
+  FROM
+    all_vessels AS ids
+  LEFT JOIN
+    carrier_vessels AS carrier_info
+  ON
+    ids.vessel_id = carrier_info.carrier_vessel_id
+  LEFT JOIN
+    fishing_vessels AS fishing_info
+  ON
+    ids.vessel_id = fishing_info.fishing_vessel_id
+  LEFT JOIN
+    source_vessel_info AS vessel_info
+  USING
+    (vessel_id) ),
+  --
+  -- Final formatting and results
+  --
+  result AS (
+  SELECT
+    full_vessel_info.vessel_id AS vesselId,
+    full_vessel_info.type AS type,
+    full_vessel_info.mmsi AS ssvid,
+    full_vessel_info.shipname AS name,
+    full_vessel_info.imo,
+    [STRUCT(FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.first_timestamp) AS `start`,
+      FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.last_timestamp) AS `end`,
+      country_codes.iso3 AS `value`)] AS flags,
+    ANY_VALUE(full_vessel_info.authorizations) AS authorizations,
+    [STRUCT(FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.first_timestamp) AS `start`,
+      FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.last_timestamp) AS `end`,
+      full_vessel_info.mmsi AS value)] AS mmsi,
+    [STRUCT(FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.first_timestamp) AS `start`,
+      FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.last_timestamp) AS `end`,
+      full_vessel_info.callsign AS value)] AS callsign,
+    [ STRUCT("length" AS `id`,
+      "Length" AS `label`,
+      CAST(full_vessel_info.length_m AS string) AS `value`),
+    STRUCT("width" AS `id`,
+      "Width" AS `label`,
+      CAST(full_vessel_info.width_m AS string) AS `value`),
+    STRUCT("gross_tonnage" AS `id`,
+      "Gross Tonnage" AS `label`,
+      CAST(full_vessel_info.gross_tonnage AS string) AS `value`),
+    STRUCT("gear_type" AS `id`,
+      "Gear Type" AS `label`,
+      full_vessel_info.gear_type AS `value`) ] AS extra
+  FROM
+    full_vessel_info
+  LEFT JOIN
+    source_country_codes AS country_codes
+  ON
+    SUBSTR(full_vessel_info.mmsi, 1, 3) = CAST(country_codes.code AS string)
+  GROUP BY
+    full_vessel_info.vessel_id,
+    full_vessel_info.first_timestamp,
+    full_vessel_info.last_timestamp,
+    full_vessel_info.mmsi,
+    full_vessel_info.shipname,
+    full_vessel_info.imo,
+    country_codes.iso3,
+    full_vessel_info.type,
+    full_vessel_info.callsign,
+    full_vessel_info.length_m,
+    full_vessel_info.width_m,
+    full_vessel_info.gross_tonnage,
+    full_vessel_info.gear_type)
+SELECT
+  *
+FROM
+  result

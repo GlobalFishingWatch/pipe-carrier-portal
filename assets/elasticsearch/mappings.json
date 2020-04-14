@@ -1,0 +1,88 @@
+{
+  "mappings": {
+    "vessels": {
+      "properties": {
+        "vesselId": {
+          "type": "keyword"
+        },
+        "type": {
+          "type": "keyword"
+        },
+        "ssvid": {
+          "type": "keyword"
+        },
+        "name": {
+          "type": "text"
+        },
+        "imo": {
+          "type": "keyword"
+        },
+        "flags": {
+          "properties": {
+            "start": {
+              "type": "date"
+            },
+            "end": {
+              "type": "date"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          }
+        },
+        "authorizations": {
+          "properties": {
+            "start": {
+              "type": "date"
+            },
+            "end": {
+              "type": "date"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          }
+        },
+        "mmsi": {
+          "properties": {
+            "start": {
+              "type": "date"
+            },
+            "end": {
+              "type": "date"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          }
+        },
+        "callsign": {
+          "properties": {
+            "start": {
+              "type": "date"
+            },
+            "end": {
+              "type": "date"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          }
+        },
+        "extra": {
+          "properties": {
+            "id": {
+              "type": "keyword"
+            },
+            "label": {
+              "type": "keyword"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          }
+        }
+      }
+    }
+  }
+}

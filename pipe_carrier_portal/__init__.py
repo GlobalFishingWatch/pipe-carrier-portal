@@ -1,11 +1,11 @@
 """
-Pipeline for publishing summarized event information
+Pipeline for publishing carrier portal information
 """
 
-__version__ = '1.4.1'
+__version__ = '1.0.0'
 __author__ = 'Andres Arana'
 __email__ = 'andres@globalfishingwatch.org'
-__source__ = 'https://github.com/GlobalFishingWatch/pipe-events'
+__source__ = 'https://github.com/GlobalFishingWatch/pipe-carrier-portal'
 __license__ = """
 Copyright 2018 Global Fishing Watch Inc.
 Authors:

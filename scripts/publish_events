@@ -80,7 +80,7 @@ if [ "$?" -ne 0 ]; then
   exit 1
 fi
 echo "  Converting json events to csv format"
-cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_events.postgis.formatter ${LOCAL_CSV_FILE}
+cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_events.postgres.events ${LOCAL_CSV_FILE}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to convert events from JSON to CSV format"
   exit 1
@@ -92,13 +92,25 @@ echo "  Coverted events from JSON to CSV"
 ################################################################################
 echo "Starting the cloudsql proxy"
 cloud_sql_proxy -instances=${DEST_INSTANCE}=tcp:5432 &
+echo "  Waiting until database is ready at 127.0.0.1:5432"
 sleep 5
+i=0
+while ! nc -v -w 5 127.0.0.1 5432 < /dev/null; do
+  i=`expr $i + 1`
+  if [ $i -ge 10 ]; then
+    echo "    $(date) - still not reachable, giving up"
+    exit 1
+  fi
+  echo "    $(date) - waiting $i/10"
+  sleep 5
+done
+echo "  Database is ready"
 
 ################################################################################
 # Load data into postgres
 ################################################################################
 echo "Setting up database for data import"
-SETUP_SQL=${ASSETS}/postgres/setup.j2.sql
+SETUP_SQL=${ASSETS}/postgres/events/setup.j2.sql
 jinja2 ${SETUP_SQL} \
   -D table_name=${DEST_TABLE} \
   -D event_type=${DEST_EVENT_TYPE} \
@@ -117,7 +129,7 @@ if [ "$?" -ne 0 ]; then
 fi
 
 echo "  Indexing data"
-INDEX_SQL=${ASSETS}/postgres/index.j2.sql
+INDEX_SQL=${ASSETS}/postgres/events/index.j2.sql
 jinja2 ${INDEX_SQL} \
   -D table_name=${DEST_TABLE} \
   | psql -v ON_ERROR_STOP=ON "${DEST_CONNECTION_STRING}"
