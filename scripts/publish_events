@@ -110,7 +110,7 @@ echo "  Database is ready"
 # Load data into postgres
 ################################################################################
 echo "Setting up database for data import"
-SETUP_SQL=${ASSETS}/postgres/events/setup.j2.sql
+SETUP_SQL=${ASSETS}/postgres/events/setup.sql.j2
 jinja2 ${SETUP_SQL} \
   -D table_name=${DEST_TABLE} \
   -D event_type=${DEST_EVENT_TYPE} \
@@ -129,7 +129,7 @@ if [ "$?" -ne 0 ]; then
 fi
 
 echo "  Indexing data"
-INDEX_SQL=${ASSETS}/postgres/events/index.j2.sql
+INDEX_SQL=${ASSETS}/postgres/events/index.sql.j2
 jinja2 ${INDEX_SQL} \
   -D table_name=${DEST_TABLE} \
   | psql -v ON_ERROR_STOP=ON "${DEST_CONNECTION_STRING}"

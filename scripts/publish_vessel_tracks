@@ -14,8 +14,9 @@ ARGS=( \
   TEMP_DATASET \
   TEMP_BUCKET \
   DEST_INSTANCE \
-  DEST_CONNECTION_STRING \
+  DEST_DATABASE \
   DEST_TABLE \
+  DEST_CONNECTION_STRING \
 )
 
 ################################################################################
@@ -57,7 +58,7 @@ jinja2 ${EXTRACT_SQL} \
   -D end=${END_DATE} \
   -D encounter_events=${SOURCE_ENCOUNTER_EVENTS//:/.} \
   -D loitering_events=${SOURCE_LOITERING_EVENTS//:/.} \
-  -D messsages=${SOURCE_MESSSAGES//:/.} \
+  -D messages=${SOURCE_MESSAGES//:/.} \
   -D segment_info=${SOURCE_SEGMENT_INFO//:/.} \
   -D segment_vessel=${SOURCE_SEGMENT_VESSEL//:/.} \
   | bq --headless query \
@@ -75,10 +76,11 @@ echo "  Extracted the records to export into ${TEMP_EXTRACT_TABLE}"
 ################################################################################
 echo "Exporting records from $TEMP_EXTRACT_TABLE"
 TEMP_PATH=gs://${TEMP_BUCKET}/pipe-carrier-portal/publish-postgres-tracks/$( date -u "+%FT%T.%N" )
-EXTRACT_PATH=$TEMP_PATH/bq/*.json.gz
+EXTRACT_PATH=$TEMP_PATH/bq/*.csv
 bq --headless extract \
   --compression=GZIP \
-  --destination_format=NEWLINE_DELIMITED_JSON \
+  --print_header=false \
+  --destination_format=CSV \
   $TEMP_EXTRACT_TABLE \
   $EXTRACT_PATH
 if [ "$?" -ne 0 ]; then
@@ -97,39 +99,6 @@ if [ "$?" -ne 0 ]; then
   exit 1
 fi
 echo "  Deleted the temp extract table ${TEMP_EXTRACT_TABLE}"
-
-################################################################################
-# Download files locally
-################################################################################
-echo "Downloading records from ${TEMP_EXTRACT_TABLE} to local disk"
-LOCAL_JSON_PATH=./data/json/
-mkdir -p ${LOCAL_JSON_PATH}
-gsutil -m cp ${EXTRACT_PATH} ${LOCAL_JSON_PATH}
-if [ "$?" -ne 0 ]; then
-  echo "  Unable to download records data locally from ${TEMP_BUCKET}"
-  exit 1
-fi
-echo "  Downloaded records from ${TEMP_BUCKET}"
-
-################################################################################
-# Convert format from json to exported sql format
-################################################################################
-echo "Converting downloaded files to csv format"
-LOCAL_CSV_PATH=./data/csv
-LOCAL_CSV_FILE=${LOCAL_CSV_PATH}/data.csv
-echo "Creating local csv directory"
-mkdir -p ${LOCAL_CSV_PATH}
-if [ "$?" -ne 0 ]; then
-  echo "  Unable to create local CSV directory"
-  exit 1
-fi
-echo "Converting json records to csv format"
-zcat ${LOCAL_JSON_PATH}/*.json.gz | python -m pipe_carrier_portal.postgres.tracks ${LOCAL_CSV_FILE}
-if [ "$?" -ne 0 ]; then
-  echo "  Unable to convert records from JSON to CSV format"
-  exit 1
-fi
-echo "  Coverted records from JSON to CSV"
 
 ################################################################################
 # Start the cloudsql proxy
@@ -166,12 +135,25 @@ if [ "$?" -ne 0 ]; then
 fi
 
 echo "Importing data"
-COPY_COMMAND="\copy ${DEST_TABLE} (seg_id, vessel_id, timestamp, position, score, speed, course) from stdin with (format 'csv')"
-cat ${LOCAL_CSV_FILE} | psql -v ON_ERROR_STOP=ON "${DEST_CONNECTION_STRING}" -c "$COPY_COMMAND"
-if [ "$?" -ne 0 ]; then
-  echo "  Unable to import data into postgres"
-  exit 1
-fi
+IFS=: read GCLOUD_SQL_PROJECT GCLOUD_SQL_REGION GCLOUD_SQL_INSTANCE <<<"${DEST_INSTANCE}"
+echo "  Importing data to instance ${GCLOUD_SQL_INSTANCE} at project ${GCLOUD_SQL_PROJECT}"
+CSV_FILES=$(gsutil ls ${EXTRACT_PATH})
+for CSV_FILE in ${CSV_FILES}; do
+  echo "  Importing data from file ${CSV_FILE}"
+  gcloud sql import csv \
+    ${GCLOUD_SQL_INSTANCE} \
+    ${CSV_FILE} \
+    --user=postgres \
+    --quiet \
+    --project=${GCLOUD_SQL_PROJECT} \
+    --database=${DEST_DATABASE} \
+    --table=${DEST_TABLE} \
+    --columns=seg_id,vessel_id,timestamp,position,score,speed,course
+  if [ "$?" -ne 0 ]; then
+    echo "  Unable to import data into postgres"
+    exit 1
+  fi
+done
 
 echo "Indexing data"
 INDEX_SQL=${ASSETS}/postgres/tracks/index.sql.j2
