@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Setup script for pipe-orbcomm
+Setup script for pipe-carrier-portal
 """
 
 import codecs
@@ -15,7 +15,7 @@ import subprocess
 from distutils.command.build import build as _build
 
 
-package = __import__('pipe_events')
+package = __import__('pipe_carrier_portal')
 
 
 DEPENDENCIES = [

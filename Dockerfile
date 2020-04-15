@@ -32,8 +32,8 @@ RUN \
   chmod +x /usr/local/bin/cloud_sql_proxy && \
   apt-get -y install postgresql-client
 
-# Install uuidgen
-RUN apt-get install -y uuid-runtime netcat
+# Install some commandline utilities for the scripts we run here
+RUN apt-get install -y uuid-runtime netcat jshon
 
 # Setup a volume for configuration and auth data
 VOLUME ["/root/.config"]

@@ -140,19 +140,43 @@ echo "  Importing data to instance ${GCLOUD_SQL_INSTANCE} at project ${GCLOUD_SQ
 CSV_FILES=$(gsutil ls ${EXTRACT_PATH})
 for CSV_FILE in ${CSV_FILES}; do
   echo "  Importing data from file ${CSV_FILE}"
+  JOB_URL=$( \
   gcloud sql import csv \
     ${GCLOUD_SQL_INSTANCE} \
     ${CSV_FILE} \
     --user=postgres \
     --quiet \
+    --async \
     --project=${GCLOUD_SQL_PROJECT} \
     --database=${DEST_DATABASE} \
     --table=${DEST_TABLE} \
-    --columns=seg_id,vessel_id,timestamp,position,score,speed,course
+    --columns=seg_id,vessel_id,timestamp,position,score,speed,course \
+  )
   if [ "$?" -ne 0 ]; then
-    echo "  Unable to import data into postgres"
+    echo "  Unable to launch import process into postgres"
     exit 1
   fi
+
+  echo "  Setting up poll process to read command status for command ${JOB_URL}"
+  POLL_STATUS="\"RUNNING\""
+  while [ "${POLL_STATUS}" == "\"RUNNING\"" ]; do
+    echo "    Waiting 30s for import process ${JOB_URL} to complete, currently ${POLL_STATUS}"
+    sleep 30
+    POLL_STATUS=$(gcloud sql operations describe ${JOB_URL} --format json | jshon -e status)
+
+    if [ "$?" -ne 0 ]; then
+      echo "  Unable to check job status for job ${JOB_URL}"
+      exit 1
+    fi
+  done
+
+  echo "  After waiting for job status to complete, poll status is ${POLL_STATUS}"
+  if [ ! "$POLL_STATUS" == "\"DONE\"" ]; then
+    echo "  Job ${JOB_URL} failed with status code ${POLL_STATUS}"
+    exit 1
+  fi
+
+  echo "  Import process copmleted successfully with poll status ${POLL_STATUS}"
 done
 
 echo "Indexing data"
