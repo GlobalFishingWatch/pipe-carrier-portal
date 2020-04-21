@@ -63,7 +63,7 @@ echo "  Events table exists"
 # Generate the loitering events
 ################################################################################
 echo "Generating loitering events at ${DEST_TABLE}"
-SQL=${ASSETS}/bigquery/events/loitering-events.sql.j2
+SQL=${ASSETS}/bigquery/events-loitering-events.sql.j2
 jinja2 ${SQL} \
   -D raw_loitering_events=${SOURCE_RAW_LOITERING_EVENTS//:/.} \
   -D segment_info=${SOURCE_SEGMENT_INFO//:/.} \

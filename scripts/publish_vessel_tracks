@@ -51,7 +51,7 @@ fi
 echo "Generating track into temp table"
 UUID=$(uuidgen)
 TEMP_EXTRACT_TABLE="${TEMP_DATASET}.${UUID//-/_}"
-EXTRACT_SQL=${ASSETS}/bigquery/tracks/aggregate-tracks.sql.j2
+EXTRACT_SQL=${ASSETS}/bigquery/tracks-aggregate-tracks.sql.j2
 echo "  Running query to destionation table ${TEMP_EXTRACT_TABLE}"
 jinja2 ${EXTRACT_SQL} \
   -D start=${START_DATE} \

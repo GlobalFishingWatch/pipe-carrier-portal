@@ -63,7 +63,7 @@ echo "  Events table exists"
 # Generate the anchorage events
 ################################################################################
 echo "Generating port events at ${DEST_TABLE}"
-SQL=${ASSETS}/bigquery/events/anchorage-events.sql.j2
+SQL=${ASSETS}/bigquery/events-anchorage-events.sql.j2
 jinja2 ${SQL} \
   -D encounter_events=${SOURCE_ENCOUNTER_EVENTS//:/.} \
   -D loitering_events=${SOURCE_LOITERING_EVENTS//:/.} \

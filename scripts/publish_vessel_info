@@ -1,11 +1,15 @@
 #!/bin/bash
-set -e
 source pipe-tools-utils
 
 THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 ASSETS=${THIS_SCRIPT_DIR}/../assets
 ARGS=( \
-  SOURCE_QUERY \
+  SOURCE_ENCOUNTER_EVENTS \
+  SOURCE_LOITERING_EVENTS \
+  SOURCE_VESSEL_INFO \
+  SOURCE_VESSEL_DATABASE \
+  SOURCE_COUNTRY_CODES \
+  SOURCE_RESEARCH_VESSEL_INFO \
   TEMP_DATASET \
   TEMP_BUCKET \
   ELASTIC_SEARCH_SERVER_URL \
@@ -39,12 +43,16 @@ done
 echo "Running vessel information query"
 UUID=$(uuidgen)
 TEMP_EXTRACT_TABLE="${TEMP_DATASET}.${UUID//-/_}"
+VESSEL_INFO_QUERY="${ASSETS}/bigquery/vessels-vessel-info.sql.j2"
 echo "  Running query to destination table ${TEMP_EXTRACT_TABLE}"
-echo "${SOURCE_QUERY}" \
-  | bq --headless query \
-  -n 0 \
-  --destination_table ${TEMP_EXTRACT_TABLE} \
-  --use_legacy_sql=false
+jinja2 ${VESSEL_INFO_QUERY} \
+  -D encounter_events=${SOURCE_ENCOUNTER_EVENTS//:/.} \
+  -D loitering_events=${SOURCE_LOITERING_EVENTS//:/.} \
+  -D vessel_info=${SOURCE_VESSEL_INFO//:/.} \
+  -D vessel_database=${SOURCE_VESSEL_DATABASE//:/.} \
+  -D country_codes=${SOURCE_COUNTRY_CODES//:/.} \
+  -D vi_ssvid_by_year=${SOURCE_RESEARCH_VESSEL_INFO//:/.} \
+  | bq query --max_rows=0 --allow_large_results --replace --destination_table ${TEMP_EXTRACT_TABLE}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to run vessel information query into ${TEMP_EXTRACT_TABLE}"
   exit 1
@@ -55,7 +63,7 @@ echo "  Extracted vessel information into ${TEMP_EXTRACT_TABLE}"
 ## Export records to json files
 #################################################################################
 echo "Exporting records from $TEMP_EXTRACT_TABLE"
-TEMP_PATH=gs://${TEMP_BUCKET}/pipe-vessels/publish-vessel-info/$( date -u "+%FT%T.%N" )
+TEMP_PATH=gs://${TEMP_BUCKET}/pipe-carrier-portal/publish-vessel-info/$( date -u "+%FT%T.%N" )
 TEMP_EXTRACT_PATH=$TEMP_PATH/bq/*.json.gz
 bq --headless extract \
   --compression=GZIP \
@@ -98,7 +106,7 @@ echo "  Downloaded records from ${TEMP_EXTRACT_PATH}"
 echo "Loading data into Elastic Search"
 ELASTIC_SEARCH_INDEX_MAPPINGS=$(cat $ASSETS/elasticsearch/mappings.json)
 zcat ${LOCAL_JSON_PATH}/*.json.gz \
-  | python -u -m pipe_vessels.elasticsearch.importer $ELASTIC_SEARCH_SERVER_URL $ELASTIC_SEARCH_SERVER_AUTH $ELASTIC_SEARCH_INDEX_ALIAS "$ELASTIC_SEARCH_INDEX_MAPPINGS"
+  | python -u -m pipe_carrier_portal.elasticsearch.importer $ELASTIC_SEARCH_SERVER_URL $ELASTIC_SEARCH_SERVER_AUTH $ELASTIC_SEARCH_INDEX_ALIAS "$ELASTIC_SEARCH_INDEX_MAPPINGS"
 if [ "$?" -ne 0 ]; then
   echo "  Unable to load data into Elastic Search"
   exit 1

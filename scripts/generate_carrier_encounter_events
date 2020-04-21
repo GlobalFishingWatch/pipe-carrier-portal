@@ -2,7 +2,6 @@
 source pipe-tools-utils
 
 THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-# source ${THIS_SCRIPT_DIR}/pipeline.sh
 ASSETS=${THIS_SCRIPT_DIR}/../assets
 ARGS=( \
   SOURCE_TABLE \
@@ -68,7 +67,7 @@ echo "  Events table exists"
 echo "Generating intermediate results table"
 UUID=$(uuidgen)
 INTERMEDIATE_TABLE="${TEMP_DATASET}.${UUID//-/_}"
-SQL=${ASSETS}/bigquery/events/encounter-events-01.sql.j2
+SQL=${ASSETS}/bigquery/events-encounter-events-01.sql.j2
 jinja2 ${SQL} \
   -D source_table=${SOURCE_TABLE//:/.} \
   -D source_filter=${SOURCE_FILTER} \
@@ -92,7 +91,7 @@ fi
 # real data
 ################################################################################
 echo "Processing intermediate results"
-SQL=${ASSETS}/bigquery/events/encounter-events-02.sql.j2
+SQL=${ASSETS}/bigquery/events-encounter-events-02.sql.j2
 jinja2 ${SQL} \
   -D complete_encounter_with_authorizations=${INTERMEDIATE_TABLE} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
