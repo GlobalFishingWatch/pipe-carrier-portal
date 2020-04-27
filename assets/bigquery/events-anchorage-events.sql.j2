@@ -40,6 +40,11 @@ WITH
     FROM
       `{{ spatial_measures }}`
   ),
+  source_country_codes AS (
+  SELECT
+    *
+  FROM
+    `{{ country_codes }}` ),
   --
   -- Select all unique vessel ids. This is required because each vessel may
   -- participate in multiple encounters, or may participate as a carrier in
@@ -433,10 +438,8 @@ WITH
     event.end_timestamp AS next_timestamp,
     vessel.shipname.value AS main_vessel_shipname,
     vessel.ssvid AS main_vessel_ssvid,
-  IF
-    (anchorage.label_source = 'top_destination',
-      NULL,
-      anchorage.label) AS anchorage_label,
+    vessel_country.iso3 AS main_vessel_flag,
+    IF (anchorage.label_source = 'top_destination', NULL, anchorage.label) AS anchorage_label,
     anchorage.top_destination AS anchorage_top_destination,
     anchorage.iso3 AS anchorage_flag,
     measures.regions AS regions
@@ -454,6 +457,10 @@ WITH
     source_spatial_measures AS measures
   ON
     FORMAT("lon:%+07.2f_lat:%+07.2f", ROUND(anchorage.lon/0.01)*0.01, ROUND(anchorage.lat/0.01)*0.01) = measures.gridcode
+  LEFT JOIN
+    source_country_codes AS vessel_country
+  ON
+    SUBSTR(vessel.ssvid, 1, 3) = CAST(vessel_country.code AS string)
   WHERE
     TIMESTAMP_DIFF(event.end_timestamp, event.start_timestamp, SECOND)/3600 > {{ min_stop_length }})
   --
@@ -489,7 +496,8 @@ SELECT
   )) AS event_info,
   TO_JSON_STRING([STRUCT( vessel_id AS `id`,
       main_vessel_ssvid AS `ssvid`,
-      main_vessel_shipname AS `name` )]) AS event_vessels,
+      main_vessel_shipname AS `name`,
+      main_vessel_flag as `flag`)]) AS event_vessels,
   ST_GEOGFROMTEXT(CONCAT('POINT (', CAST(vessel_lon AS string), ' ', CAST(vessel_lat AS string), ')')) AS event_geography
 FROM
   complete_port_event

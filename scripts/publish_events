@@ -37,6 +37,7 @@ done
 # Export events to json files
 ################################################################################
 echo "Exporting events from $SOURCE"
+TEMP_PATH=gs://${TEMP_BUCKET}/pipe-carrier-portal/$( date -u "+%FT%T.%N" )
 EXTRACT_PATH=$TEMP_PATH/bq/*.json
 bq extract \
   --destination_format=NEWLINE_DELIMITED_JSON \
@@ -80,7 +81,7 @@ if [ "$?" -ne 0 ]; then
   exit 1
 fi
 echo "  Converting json events to csv format"
-cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_events.postgres.events ${LOCAL_CSV_FILE}
+cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_carrier_portal.postgres.events ${LOCAL_CSV_FILE}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to convert events from JSON to CSV format"
   exit 1

@@ -12,6 +12,7 @@ ARGS=( \
   SOURCE_SPATIAL_MEASURES \
   SOURCE_PORT_VISITS \
   SOURCE_NAMED_ANCHORAGES \
+  SOURCE_COUNTRY_CODES \
   MIN_STOP_LENGTH \
   DEST_TABLE \
 )
@@ -72,6 +73,7 @@ jinja2 ${SQL} \
   -D port_visits=${SOURCE_PORT_VISITS//:/.} \
   -D named_anchorages=${SOURCE_NAMED_ANCHORAGES//:/.} \
   -D spatial_measures=${SOURCE_SPATIAL_MEASURES//:/.} \
+  -D country_codes=${SOURCE_COUNTRY_CODES//:/.} \
   -D min_stop_length=${MIN_STOP_LENGTH} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
 
