@@ -1,12 +1,28 @@
 WITH
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
+  -- Source tables
+  --------------------------------------------------------------------------------
+  source_vi_ssvid_global AS (
+    SELECt
+      *
+    FROM
+      `gfw_research.vi_ssvid_v20200115`
+  ),
+  source_vi_ssvid_by_year AS (
+    SELECT
+      *
+    FROM
+      `gfw_research.vi_ssvid_byyear_v20200115`
+  ),
+
+  --------------------------------------------------------------------------------
   -- SSVID that are likely fishing gear
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   likely_gear AS (
   SELECT
     ssvid
   FROM
-    `gfw_research.vi_ssvid_v20200115`
+    source_vi_ssvid_global
   WHERE
     REGEXP_CONTAINS(ais_identity.shipname_mostcommon.value, r"(.*)([\s]+[0-9]+%)$")
     OR REGEXP_CONTAINS(ais_identity.shipname_mostcommon.value, r"[0-9]\.[0-9]V")
@@ -15,9 +31,9 @@ WITH
     OR REGEXP_CONTAINS(ais_identity.shipname_mostcommon.value, r"NET MARK")
     OR REGEXP_CONTAINS(ais_identity.shipname_mostcommon.value, r"NETMARK")
     OR REGEXP_CONTAINS(ais_identity.shipname_mostcommon.value, r"^[0-9]*\-[0-9]*$")),
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   -- List of problem MMSI to manually exclude
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   bad_mmsi AS (
   SELECT
     CAST(ssvid AS string) AS ssvid
@@ -25,9 +41,9 @@ WITH
     gfw_research.bad_mmsi
   CROSS JOIN
     UNNEST(ssvid) AS ssvid ),
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   -- All fishing vesels according to the vi_ssvid tables
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   fishing_mmsi AS (
   SELECT
     vi_by_year.ssvid,
@@ -42,9 +58,9 @@ WITH
     -- table for inference fields. Hopefully, once we have rolling window
     -- monthly runs of vessel inference we can include updated inference
     -- information on each yearly record, and so this won't be required.
-    `gfw_research.vi_ssvid_byyear_v20200115` AS vi_by_year
+    source_vi_ssvid_by_year AS vi_by_year
   INNER JOIN
-    `gfw_research.vi_ssvid_v20200115` AS vi_global
+    source_vi_ssvid_global AS vi_global
   USING
     (ssvid)
   WHERE
@@ -89,9 +105,9 @@ WITH
     AND vi_by_year.activity.fishing_hours > 24
     -- MMSI was active at least during 5 full days. Noise filter.
     AND vi_by_year.activity.active_hours > 24*5 ),
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   -- Extract the final yearly information
-  -------------------------------------------------------------------------------- 
+  --------------------------------------------------------------------------------
   results AS (
   SELECT
     ssvid,
