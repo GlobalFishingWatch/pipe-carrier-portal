@@ -31,6 +31,12 @@ WITH
     *
   FROM
     `{{ segment_vessel }}`),
+  source_research_segs AS (
+  SELECT
+    *
+  FROM
+    `{{ research_segs }}`
+  ),
   --
   -- Select all unique vessel ids from the encounters. This is required because
   -- each vessel may participate in multiple encounters, or may participate as
@@ -70,8 +76,13 @@ WITH
     source_segment_vessel AS sv
   USING
     (seg_id)
+  INNER JOIN
+    source_research_segs AS rs
+  USING
+    (seg_id)
   WHERE
     si.noise = FALSE
+    AND rs.overlapping_and_short = FALSE
     AND si.pos_count > 5
     AND m.lat IS NOT NULL
     AND m.lon IS NOT NULL

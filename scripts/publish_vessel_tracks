@@ -11,6 +11,7 @@ ARGS=( \
   SOURCE_MESSAGES \
   SOURCE_SEGMENT_INFO \
   SOURCE_SEGMENT_VESSEL \
+  SOURCE_RESEARCH_SEGS \
   TEMP_DATASET \
   TEMP_BUCKET \
   DEST_INSTANCE \
@@ -61,6 +62,7 @@ jinja2 ${EXTRACT_SQL} \
   -D messages=${SOURCE_MESSAGES//:/.} \
   -D segment_info=${SOURCE_SEGMENT_INFO//:/.} \
   -D segment_vessel=${SOURCE_SEGMENT_VESSEL//:/.} \
+  -D research_segs=${SOURCE_RESEARCH_SEGS//:/.} \
   | bq --headless query \
   -n 0 \
   --destination_table ${TEMP_EXTRACT_TABLE} \
