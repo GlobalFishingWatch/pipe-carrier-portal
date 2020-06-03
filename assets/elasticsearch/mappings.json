@@ -17,6 +17,12 @@
         "imo": {
           "type": "keyword"
         },
+        "firstTimestamp": {
+          "type": "date"
+        },
+        "lastTimestamp": {
+          "type": "date"
+        },
         "flags": {
           "properties": {
             "start": {

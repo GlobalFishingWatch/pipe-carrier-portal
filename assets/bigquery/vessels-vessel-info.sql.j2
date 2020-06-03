@@ -208,6 +208,8 @@ WITH
     full_vessel_info.mmsi AS ssvid,
     full_vessel_info.shipname AS name,
     full_vessel_info.imo,
+    FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.first_timestamp) AS `firstTimestamp`,
+    FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.last_timestamp) AS `lastTimestamp`,
     [STRUCT(FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.first_timestamp) AS `start`,
       FORMAT_TIMESTAMP("%Y-%m-%d", full_vessel_info.last_timestamp) AS `end`,
       country_codes.iso3 AS `value`)] AS flags,
