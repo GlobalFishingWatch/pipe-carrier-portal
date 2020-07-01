@@ -1,5 +1,4 @@
-
--- David Kroodsma, August 16, 2019
+-- David Kroodsma, June 30, 2020
 -- This fairly convoluted query does the following:
 --  - groups information by hour by vessel
 --  - gets the average speed and first and last point for each hour
@@ -10,6 +9,20 @@
 -- query needs to look one position backward from the first position, because the calculated
 -- distance and time is between the previous position and the current position.
 ----------------------------------------
+
+create temporary function max_hour_gap() as 
+(24);
+
+create temporary function min_distance_to_shore_nm() as 
+(20);
+
+create temporary function meters_per_nm() as
+(1852);
+
+create temporary function km_per_nm() as
+(1.852);
+
+
 WITH
   --------------------
   -- AIS Source data
@@ -20,22 +33,9 @@ WITH
     *
   FROM
     `gfw_research.pipe_v20200203`
-  WHERE
-    _partitiontime BETWEEN TIMESTAMP("2017-01-01")
-    AND TIMESTAMP("2020-06-01") ),
-  ------------------------------------------------------
-  -- What is a carrier mmsi? This selects these vessels.
-  -- Note that we should exclude any mmsi that are spoofing
-  ------------------------------------------------------
-  carrier_mmsi AS (
-  SELECT
-    identity.ssvid AS mmsi
-  FROM
-    `vessel_database.all_vessels_v20200601`
-  WHERE
-    is_carrier
-    AND matched),
-  --------------------------------------------
+ ),
+ 
+   --------------------------------------------
   -- What are we including as good segments?
   -- note that we exclude overlaping and short here
   -- becauase we are doing this by ssvid
@@ -48,9 +48,68 @@ WITH
   WHERE
     good_seg
     AND NOT overlapping_and_short ),
+ 
+ 
+   ------------------------------------------------------
+  -- What is a carrier mmsi? This selects these vessels.
+  -- Note that we should exclude any mmsi that are spoofing
+  ------------------------------------------------------
+  carrier_mmsi AS (
+  SELECT
+    identity.ssvid AS mmsi
+  FROM
+    `vessel_database.all_vessels_v20200601`
+  WHERE
+    is_carrier
+    AND matched),
+    
+ ------------
+ 
+   source_table_inferredspeed AS (
+   select 
+     * except(meters_to_prev_inferred,hours_inferred),
+     if(hours_inferred > max_hour_gap(), 
+        .001, -- assign the position a thousandth of an hour instead of 0
+        hours_inferred) hours_inferred,
+     if(hours_inferred>max_hour_gap(), 
+        .001 * speed_knots * meters_per_nm(), -- assign the position the distance, in meters, the vessel
+                              -- would have traveled in .001 hours. This will make
+                              -- it so that we don't get null values in the inplied
+                              -- speed calculation
+        meters_to_prev_inferred) meters_to_prev_inferred
+     from 
+     (
+    SELECT
+      *,
+      st_distance(
+             st_geogpoint(lon, lat), 
+             lag(st_geogpoint(lon, lat), 1) over (partition by ssvid order by timestamp)
+             ) meters_to_prev_inferred,
+      timestamp_diff(
+             timestamp, 
+             lag(timestamp, 1) over (partition by ssvid order by timestamp),
+             second)/3600 hours_inferred,    
+    FROM
+        source_table
+      WHERE
+        abs(lat) <90
+        AND abs(lon)<180 
+        AND ssvid IN (
+        SELECT
+          mmsi
+        FROM
+          carrier_mmsi)
+        AND seg_id IN (
+        Select * from good_segs)
+   )
+ ),
+ 
+ 
+
+
   -----------------------------------------------
   -- FIND PREVIOUS AND NEXT SPEEDS and TIMESTAMPS
-  -- (note speed in km/hr)
+  -- (note that speed in km/hr)
   -----------------------------------------------
   prev_next_speeds AS (
   SELECT
@@ -102,32 +161,17 @@ WITH
       FROM
         timestamp) year,
       # avg_speed is the average implied speed for all points in a given hour block
-      safe_divide(SUM(meters_to_prev /1000),
-        SUM(hours)) avg_speed,
+      safe_divide(SUM(meters_to_prev_inferred/1000),
+        SUM(hours_inferred)) avg_speed,
       # the first and last timestamp in this hour block
       CAST(MIN(timestamp) AS TIMESTAMP) start_timestamp,
       CAST(MAX(timestamp) AS TIMESTAMP) end_timestamp,
-      SUM(hours) hours,
-      SUM(meters_to_prev/1000) km,
+      SUM(hours_inferred) hours,
+      SUM(meters_to_prev_inferred/1000) km,
       AVG(distance_from_shore_m) distance_from_shore,
       COUNT(*) positions
     FROM
-      source_table
-    WHERE
-      lat <90
-      AND lat>-90
-      AND lon>-180
-      AND lon<180
-      AND ssvid IN (
-      SELECT
-        mmsi
-      FROM
-        carrier_mmsi)
-      AND seg_id IN (
-      SELECT
-        seg_id
-      FROM
-        good_segs)
+      source_table_inferredspeed
     GROUP BY
       ssvid,
       t,
@@ -146,20 +190,20 @@ WITH
   slow_segments AS (
   SELECT
     -- convert to to knots
-    avg_speed < 2*1.852 AS slow,
+    avg_speed < 2 * km_per_nm() AS slow,
     # if the speed this hour is below cutoff, then it is slow
-    next_speed < 2*1.852 AS next_slow,
+    next_speed < 2 * km_per_nm() AS next_slow,
     # if the speed in the next hour with data is below cutoff, then next_slow
-    last_speed < 2*1.852 AS last_slow,
+    last_speed < 2 * km_per_nm() AS last_slow,
     # if the speed in the previous hour with data is below cutoff, then prev_slow
   IF
-    (TIMESTAMP_DIFF(start_timestamp, last_timestamp, MICROSECOND)/3600000000 > 24
+    (TIMESTAMP_DIFF(start_timestamp, last_timestamp, MICROSECOND)/3600000000 > max_hour_gap()
       OR last_timestamp IS NULL,
       TRUE,
       FALSE) segment_start,
     # if it is the start of a segment
   IF
-    (TIMESTAMP_DIFF(next_timestamp, start_timestamp, MICROSECOND)/3600000000 > 24
+    (TIMESTAMP_DIFF(next_timestamp, start_timestamp, MICROSECOND)/3600000000 > max_hour_gap()
       OR next_timestamp IS NULL,
       TRUE,
       FALSE) segment_end,
@@ -238,12 +282,12 @@ WITH
     loitering_start_timestamp,
     loitering_end_timestamp,
     ROUND(TIMESTAMP_DIFF(loitering_end_timestamp, loitering_start_timestamp, MICROSECOND)/3600000000,1) hours,
-    ROUND((start_distance_from_shore_m + end_distance_from_shore_m)/2/1852,1) avg_distance_from_shore_nm
+    ROUND((start_distance_from_shore_m + end_distance_from_shore_m)/2/meters_per_nm(),1) avg_distance_from_shore_nm
   FROM
     loitering_start_end
   WHERE
     begin_slow
-    AND (start_distance_from_shore_m + end_distance_from_shore_m)/2 > 1852*20),
+    AND (start_distance_from_shore_m + end_distance_from_shore_m)/2 > meters_per_nm() * min_distance_to_shore_nm()),
   # filter for only events that have an average distance to shore above a given distance
   #
   ##
@@ -263,25 +307,19 @@ WITH
     a.avg_distance_from_shore_nm avg_distance_from_shore_nm,
     a.ssvid AS ssvid,
     safe_divide(SUM(avg_distance_km),
-      SUM(b.hours)) km_per_hour,
+      SUM(b.hours_inferred)) km_per_hour,
     SUM(avg_distance_km ) tot_distance_km,
-    SUM(b.hours) tot_hours
+    SUM(b.hours_inferred) tot_hours
   FROM
     loitering_event_ranges_short a
   LEFT JOIN (
     SELECT
       ssvid,
-      meters_to_prev/1000 AS avg_distance_km,
-      hours,
+      meters_to_prev_inferred/1000 AS avg_distance_km,
+      hours_inferred,
       timestamp
     FROM
-      source_table
-    WHERE
-      seg_id IN (
-      SELECT
-        seg_id
-      FROM
-        good_segs) )b
+      source_table_inferredspeed) b
   ON
     a.ssvid = b.ssvid
   WHERE
@@ -312,7 +350,7 @@ WITH
     # the first position in the loitering
   IF
     (actual_loitering_start_timestamp IS NULL
-      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > 24,
+      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > max_hour_gap(),
       loitering_start_timestamp,
       actual_loitering_start_timestamp) loitering_start_timestamp,
     loitering_end_timestamp,
@@ -320,15 +358,15 @@ WITH
     a.ssvid AS ssvid,
   IF
     (actual_loitering_start_timestamp IS NULL
-      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > 24,
+      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > max_hour_gap(),
       lat,
       actual_start_lat) start_lat,
   IF
     (actual_loitering_start_timestamp IS NULL
-      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > 24,
+      OR TIMESTAMP_DIFF(loitering_start_timestamp, actual_loitering_start_timestamp, MICROSECOND)/3600000000 > max_hour_gap(),
       lon,
       actual_start_lon) start_lon,
-    km_per_hour/1.85 AS speed_knots,
+    km_per_hour/1.852 AS speed_knots,
     tot_distance_km,
     tot_hours,
     avg_distance_from_shore_nm
@@ -348,13 +386,8 @@ WITH
       seg_id,
       ssvid
     FROM
-      source_table
-    WHERE
-      seg_id IN (
-      SELECT
-        seg_id
-      FROM
-        good_segs)) b
+      source_table_inferredspeed 
+    ) b
   ON
     a.ssvid = b.ssvid
   WHERE
@@ -394,13 +427,8 @@ WITH
         timestamp,
         ssvid
       FROM
-        source_table )
-    WHERE
-      seg_id IN (
-      SELECT
-        seg_id
-      FROM
-        good_segs ) ) b
+        source_table_inferredspeed  )
+    ) b
   ON
     a.ssvid = b.ssvid
   WHERE
@@ -411,4 +439,3 @@ SELECT
   *
 FROM
   loitering_final
-
