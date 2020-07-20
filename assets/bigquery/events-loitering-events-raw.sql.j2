@@ -1,4 +1,5 @@
-
+#standardSQL
+----------------------------------------
 -- David Kroodsma, August 16, 2019
 -- This fairly convoluted query does the following:
 --  - groups information by hour by vessel
@@ -19,10 +20,10 @@ WITH
   SELECT
     *
   FROM
-    `gfw_research.pipe_v20200203`
+    `{{ research_messages }}`
   WHERE
-    _partitiontime BETWEEN TIMESTAMP("2017-01-01")
-    AND TIMESTAMP("2020-06-01") ),
+    date BETWEEN TIMESTAMP("{{ start_date }}")
+    AND TIMESTAMP("{{ end_date }}") ),
   ------------------------------------------------------
   -- What is a carrier mmsi? This selects these vessels.
   -- Note that we should exclude any mmsi that are spoofing
@@ -31,7 +32,7 @@ WITH
   SELECT
     identity.ssvid AS mmsi
   FROM
-    `vessel_database.all_vessels_v20200601`
+    `{{vessel_database}}`
   WHERE
     is_carrier
     AND matched),
@@ -44,7 +45,7 @@ WITH
   SELECT
     seg_id
   FROM
-    `gfw_research.pipe_v20200203_segs`
+    `{{ research_segs }}`
   WHERE
     good_seg
     AND NOT overlapping_and_short ),
