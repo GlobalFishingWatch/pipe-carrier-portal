@@ -19,7 +19,7 @@ WITH
   FROM
     `{{ messages }}`
   WHERE
-    _PARTITIONTIME BETWEEN '{{start}}'
+    date BETWEEN '{{start}}'
     AND '{{end}}' ),
   source_segment_info AS (
   SELECT
