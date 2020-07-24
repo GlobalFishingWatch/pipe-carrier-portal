@@ -39,7 +39,6 @@ for index in ${!ARGS[*]}; do
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
 
-
 IFS=, read START_DATE END_DATE <<<"${DATE_RANGE}"
 if [ -z $END_DATE ] || [ $END_DATE == $START_DATE ]; then
   END_DATE=$(date +%Y-%m-%d -d "$START_DATE + 1 day")

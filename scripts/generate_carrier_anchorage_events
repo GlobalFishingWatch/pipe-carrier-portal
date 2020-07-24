@@ -5,6 +5,7 @@ THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 # source ${THIS_SCRIPT_DIR}/pipeline.sh
 ASSETS=${THIS_SCRIPT_DIR}/../assets
 ARGS=( \
+  DATE_RANGE \
   SOURCE_ENCOUNTER_EVENTS \
   SOURCE_LOITERING_EVENTS \
   SOURCE_VESSEL_INFO \
@@ -37,6 +38,11 @@ for index in ${!ARGS[*]}; do
   echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
+
+IFS=, read START_DATE END_DATE <<<"${DATE_RANGE}"
+if [ -z $END_DATE ] || [ $END_DATE == $START_DATE ]; then
+  END_DATE=$(date +%Y-%m-%d -d "$START_DATE + 1 day")
+fi
 ################################################################################
 # Force that the destination table exists
 ################################################################################
@@ -67,6 +73,8 @@ echo "  Events table exists"
 echo "Generating port events at ${DEST_TABLE}"
 SQL=${ASSETS}/bigquery/events-anchorage-events.sql.j2
 jinja2 ${SQL} \
+  -D start_date=${START_DATE} \
+  -D end_date=${END_DATE} \
   -D encounter_events=${SOURCE_ENCOUNTER_EVENTS//:/.} \
   -D loitering_events=${SOURCE_LOITERING_EVENTS//:/.} \
   -D vessel_info=${SOURCE_VESSEL_INFO//:/.} \

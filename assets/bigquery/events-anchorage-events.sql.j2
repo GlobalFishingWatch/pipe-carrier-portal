@@ -71,7 +71,7 @@ WITH
     source_port_events
   WHERE
     ---removed start and end time entries and temporarily filled with real ones
-    start_timestamp BETWEEN '2017-01-01' AND '2020-01-01'
+    start_timestamp BETWEEN '{{ start_date }}' AND '{{ end_date }}'
     AND vessel_id IN (
     SELECT
       vessel_id
