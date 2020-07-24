@@ -346,15 +346,15 @@ WITH
   ON
     encounters.carrier_vessel_id = carrier_vessel_authorization.vessel_id
     AND rfmo = carrier_vessel_authorization.registry_rfmo
-    AND encounters.start_time > carrier_vessel_authorization.registry_authorized_from
-    AND encounters.end_time < carrier_vessel_authorization.registry_authorized_to
+    AND encounters.start_time < carrier_vessel_authorization.registry_authorized_to
+    AND encounters.end_time > carrier_vessel_authorization.registry_authorized_from
   LEFT JOIN
     authorizations AS fishing_vessel_authorization
   ON
     encounters.fishing_vessel_id = fishing_vessel_authorization.vessel_id
     AND rfmo = fishing_vessel_authorization.registry_rfmo
-    AND encounters.start_time > fishing_vessel_authorization.registry_authorized_from
-    AND encounters.end_time < fishing_vessel_authorization.registry_authorized_to
+    AND encounters.start_time < fishing_vessel_authorization.registry_authorized_to
+    AND encounters.end_time > fishing_vessel_authorization.registry_authorized_from
   WHERE
     is_whitelisted_rfmo(rfmo)
   GROUP BY
