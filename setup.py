@@ -25,7 +25,7 @@ DEPENDENCIES = [
     "pytz",
     "udatetime",
     "newlinejson",
-    "pipe-tools==2.0.0",
+    "pipe-tools==3.1.2",
     "jinja2-cli",
     "statistics"
 ]
@@ -44,7 +44,7 @@ setup(
     install_requires=DEPENDENCIES,
     license="Apache 2.0",
     long_description=readme,
-    name='pipe-events',
+    name='pipe-carrier-portal',
     packages=find_packages(exclude=['test*.*', 'tests']),
     url=package.__source__,
     version=package.__version__,
