@@ -59,8 +59,9 @@ CREATE TEMPORARY FUNCTION
       WHEN "ICCAT3" THEN "ICCAT"
       WHEN "IOTC" THEN "IOTC"
       WHEN "CCSBT" THEN "CCSBT"
-      /* WHEN "NPFC" THEN "NPFC" */
-      /* WHEN "SPRFMO" THEN "SPRFMO" */
+      WHEN "NPFC" THEN "NPFC"
+      WHEN "SPRFMO" THEN "SPRFMO"
+      WHEN "SPRFMO2" THEN "SPRFMO"
   END
     );
 --
@@ -73,4 +74,6 @@ CREATE TEMPORARY FUNCTION
       "IOTC",
       "WCPFC",
       "IATTC",
-      "CCSBT" ) );
+      "CCSBT",
+      "SPRFMO",
+      "NPFC" ));
