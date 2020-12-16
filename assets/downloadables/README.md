@@ -1,0 +1,179 @@
+# Carrier portal events, version {{ dataset_version }}
+
+## Description
+
+This dataset contains the vessel encounter, loitering and port events as
+available on the [Carrier
+Portal](https://globalfishingwatch.org/carrier-portal/).
+
+[TODO: Do we need to define what each event type is?]
+
+## Files
+
+These are the files available in this dataset:
+
+* `encounters.zip`: Zipped CSV file containing all the encounter events.
+
+* `loitering.zip`: Zipped CSV file containing all the loitering events.
+
+* `port.zip`: Zipped CSV file containing all the port events.
+
+* `eez.zip`: Zipped CSV file containing all the EEZ's and their codes we use in
+  the event files.
+
+All event files share the same schema with the same columns.
+
+### File schema
+
+The columns in all 3 event files is the same, to make it easier to merge the
+files together if necessary. Some of the columns are always empty in some of
+the files when the field is not applicable to the event type of that file,
+i.e.: loitering events do not have an encountered vessel so all the columns
+related to the encountered vessel are empty in the loitering CSV file.
+
+These are the columns that are included in the CSV files:
+
+* `id`: Internal unique identifier for the event
+
+* `type`: Type of event, one of `loitering`, `encounter` or `port`. Each file
+  contains records with one and only one type (the `loitering.zip` file only
+  contains records with type `loitering`).
+
+* `start`: UTC timestamp when the event started.
+
+* `end`: UTC timestamp when the event ended.
+
+* `lat`: Latitude of the mean position for the event.
+
+* `lon`: Longitude of the mean position for the event.
+
+* `vessel.id`: Internal unique identifier for the main vessel involved in the
+  event. In the case of encounters this is the carrier vessel.
+
+* `vessel.type`: Type of vessel the main vessel is. One of `carrier` or
+  `fishing`. In the case of encounter and loitering events, this will always be
+  `carrier`. In the case of port events, it can be either.
+
+* `vessel.mmsi`: MMSI for the main vessel in the event.
+
+* `vessel.name`: Ship name for the main vessel in the event.
+
+* `vessel.flag`: Inferred flag for the main vessel, as determined from the MMSI
+  midcode.
+
+* `vessel.origin_port.country`: Country ISO3 code for the origin port of the
+  main vessel at the time the event happened. Only available in encounter and
+  loitering events.
+
+* `vessel.origin_port.name`: Port name for the origin port of the main vessel
+  at the time the event happened. Only available in encounter and loitering
+  events.
+
+* `vessel.destination_port.country`: Country ISO3 code for the destination port
+  of the main vessel at the time the event happened. Only available in
+  encounter and loitering events.
+
+* `vessel.destination_port.name`: Port name for the destination port of the
+  main vessel at the time the event happened. Only available in encounter and
+  loitering events.
+
+* `vessel.authorizations.authorized`: List of RFMO's separated by a `|`
+  character (i.e: `NPFC|SPRFMO`) where the event happened for which we've found
+  matching authorization records for the main vessel. Only available in
+  encounter events.
+
+* `vessel.authorizations.unknown`: List of RFMO's separated by a `|` character
+  (i.e: `NPFC|SPRFMO`) where the event happened for which we haven't found
+  matching authorization records for the main vessel. Only available in
+  encounter events
+
+* `median_speed_knots`: Median speed in knots for the vessel while the event
+  was happening. Only available in loitering and encounter events.
+
+* `elevation_m`: Bathymetry information at the mean position of the event, in
+  meters.
+
+* `distance_from_shore_m`: Distance from the closest shore at the mean position
+  of the event, in meters.
+
+* `distance_from_port_m`: Distance from the closest port at the mean position
+  of the event, in meters.
+
+* `regions.eez`: List of EEZ ids separated by a `|` where the event happened.
+  See the `eez.zip` file for a mapping between the ids used here and the
+  countries.
+
+* `regions.rfmo`: List of RFMOs separated by a `|` character where the event
+  happened. This is the complete list of RFMO's where the event happened,
+  including RFMO's that we don't pull authorization information from.
+
+* `encounter.median_distance_km`: Median distance between the vessels while the
+  encouter is happening. This is only available on encounter events.
+
+* `encounter.authorization_status`: General authorization status for the
+  encounter. Either `unknown` if we don't have authorization information for
+  all the possibly overlapping RFMOs, `partial` if some are authorized and some
+  not or `authorized` if we do know the vessel is authorized in all possible
+  overlapping RFMOs. Only available for encounter events.
+
+* `encounter.encountered_vessel.id`: Internal unique identifier for the
+  encountered fishing vessel involved in the event. Only available for
+  encounter events.
+
+* `encounter.encountered_vessel.type`: Type of the encountered vessel. Always
+  `fishing`. Only available for encounter events.
+
+* `encounter.encountered_vessel.mmsi`: MMSI for the encountered fishing vessel.
+  Only available for encounter events.
+
+* `encounter.encountered_vessel.name`: Ship name for the encountered fishing
+  vessel. Only available for encounter events.
+
+* `encounter.encountered_vessel.flag`: Inferred flag for the encountered
+  fishing vessel, as determined from the MMSI midcode. Only available for
+  encounter events.
+
+* `encounter.encountered_vessel.origin_port.country`: Country ISO3 code for the
+  origin port of the encountered fishing vessel at the time the event happened.
+  Only available in encounter events.
+
+* `encounter.encountered_vessel.origin_port.name`: Port name for the origin
+  port of the encountered fishing vessel at the time the event happened. Only
+  available in encounter events.
+
+* `encounter.encountered_vessel.destination_port.country`: Country ISO3 code
+  for the destination port of the encountered fishing vessel at the time the
+  event happened. Only available in encounter events.
+
+* `encounter.encountered_vessel.destination_port.name`: Port name for the
+  destination port of the encountered fishing vessel at the time the event
+  happened. Only available in encounter events.
+
+* `encounter.encountered_vessel.authorizations.authorized`: List of RFMO's
+  separated by a `|` character (i.e: `NPFC|SPRFMO`) where the event happened
+  for which we've found matching authorization records for the encountered
+  fishing vessel. Only available in encounter events.
+
+* `encounter.encountered_vessel.authorizations.unknown`: List of RFMO's
+  separated by a `|` character (i.e: `NPFC|SPRFMO`) where the event happened
+  for which we haven't found matching authorization records for the encountered
+  fishing vessel. Only available in encounter events.
+
+* `loitering.total_distance_km`: Total distance traveled by the carrier vessel
+  while the event was happening. Only available in loitering events
+
+* `loitering.loitering_hours`: Total amount of time the carrier vessel was
+  loitering. Only available in loitering events.
+
+* `port.lat`: Inferred latitude of the position for the anchorage inside the
+  port where the vessel docked. Only available in port events.
+
+* `port.lon`: Inferred longitude of the position for the anchorage inside the
+  port where the vessel docked. Only available in port events.
+
+* `port.country`: ISO3 code for the country owning the port where the vessel
+  docked. Only available in port events.
+
+* `port.name`: Name for the port where the vessel docked. Only available in
+  port events.
+

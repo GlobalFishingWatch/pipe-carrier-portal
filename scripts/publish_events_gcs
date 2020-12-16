@@ -1,0 +1,126 @@
+#!/bin/bash
+source pipe-tools-utils
+
+THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+ASSETS=${THIS_SCRIPT_DIR}/../assets
+ARGS=( \
+  SOURCE \
+  TEMP_BUCKET \
+  DEST_LOCATION \
+  DEST_EVENT_TYPE \
+  DATASET_VERSION \
+)
+
+################################################################################
+# Validate and extract arguments
+################################################################################
+display_usage() {
+  ARG_NAMES=$(echo "${ARGS[*]}")
+  echo -e "\nUsage:\n$0 $ARG_NAMES\n"
+}
+
+if [[ $# -ne ${#ARGS[@]} ]]
+then
+    display_usage
+    exit 1
+fi
+
+echo "Running $0"
+ARG_VALUES=("$@")
+for index in ${!ARGS[*]}; do
+  echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
+  declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
+done
+################################################################################
+# Export events to json files
+################################################################################
+echo "Exporting events from $SOURCE"
+TEMP_PATH=gs://${TEMP_BUCKET}/pipe-carrier-portal/$( date -u "+%FT%T.%N" )
+EXTRACT_PATH=$TEMP_PATH/bq/*.json
+bq extract \
+  --destination_format=NEWLINE_DELIMITED_JSON \
+  $SOURCE \
+  $EXTRACT_PATH
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to extract ${SOURCE} to ${EXTRACT_PATH}"
+  exit 1
+fi
+echo "  Exported events from ${SOURCE} to ${EXTRACT_PATH}"
+
+################################################################################
+# Download the json files locally as it's much faster
+################################################################################
+echo "Downloading json files"
+LOCAL_JSON_PATH=./data/json
+echo "  Creating local json directory"
+mkdir -p ${LOCAL_JSON_PATH}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to create local JSON directory"
+  exit 1
+fi
+echo "  Downloading json files"
+gsutil -m cp ${EXTRACT_PATH} ${LOCAL_JSON_PATH}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to download JSON files locally"
+  exit 1
+fi
+echo "  Downloaded JSON files"
+
+################################################################################
+# Convert format from json to downloadable csv format
+################################################################################
+echo "Converting downloaded files to csv format"
+LOCAL_CSV_PATH=./data/csv
+LOCAL_CSV_FILE=${LOCAL_CSV_PATH}/${DEST_EVENT_TYPE}.csv
+echo "  Creating local csv directory"
+mkdir -p ${LOCAL_CSV_PATH}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to create local CSV directory"
+  exit 1
+fi
+echo "  Converting json events to csv format using script ${DEST_EVENT_TYPE}"
+cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_carrier_portal.downloadables.${DEST_EVENT_TYPE} ${LOCAL_CSV_FILE}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to convert events from JSON to CSV format"
+  exit 1
+fi
+echo "  Coverted events from JSON to CSV"
+
+################################################################################
+# Push the data to cloud storage
+################################################################################
+echo "Pushing the csv files to GCS at ${DEST_LOCATION}"
+
+gsutil cp ${LOCAL_CSV_FILE} ${DEST_LOCATION}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to upload the CSV file ${LOCAL_CSV_FILE} to its target  location ${DEST_LOCATION}"
+  exit 1
+fi
+
+################################################################################
+# Push the README to cloud storage
+################################################################################
+echo "Pushing the README files to GCS at ${DEST_LOCATION}"
+LOCAL_ADDITIONAL_PATH=./data/additional
+LOCAL_ADDITIONAL_FILES=${LOCAL_ADDITIONAL_PATH}/README.md
+README_TEMPLATE=${ASSETS}/downloadables/README.md
+echo "  Creating additional files directory"
+mkdir -p ${LOCAL_ADDITIONAL_PATH}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to create local additional files directory"
+  exit 1
+fi
+jinja2 ${README_TEMPLATE} \
+  -D dataset_version=${DATASET_VERSION} \
+  > ${LOCAL_ADDITIONAL_FILES}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to render the README template"
+  exit 1
+fi
+gsutil cp ${LOCAL_ADDITIONAL_FILES} ${DEST_LOCATION}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to upload the README file ${LOCAL_ADDITIONAL_FILES} to its target  location ${DEST_LOCATION}"
+  exit 1
+fi
+
+echo "  Done importing data"
