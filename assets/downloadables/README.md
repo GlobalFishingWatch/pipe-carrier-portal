@@ -6,7 +6,19 @@ This dataset contains the vessel encounter, loitering and port events as
 available on the [Carrier
 Portal](https://globalfishingwatch.org/carrier-portal/).
 
-[TODO: Do we need to define what each event type is?]
+We include 3 event types in this dataset, each on it's own zipped CSV file:
+
+* `encounter`: Encounters between a carrier and a fishing vessel. More
+  information
+  [here](https://globalfishingwatch.org/faqs/what-is-an-encounter-in-the-carrier-vessel-portal/).
+
+* `loitering`: Carrier vessels exhibiting behavior indicative of a potential
+  encounter event. More information
+  [here](https://globalfishingwatch.org/faqs/what-are-loitering-events-in-the-carrier-vessel-portal/).
+
+* `port`: Vessels potentially docking or waiting in an anchorage. More
+  information
+  [here](https://globalfishingwatch.org/faqs/how-are-port-visits-in-the-carrier-vessel-portal-defined/).
 
 ## Files
 
@@ -36,16 +48,16 @@ These are the columns that are included in the CSV files:
 * `id`: Internal unique identifier for the event
 
 * `type`: Type of event, one of `loitering`, `encounter` or `port`. Each file
-  contains records with one and only one type (the `loitering.zip` file only
-  contains records with type `loitering`).
+  contains records with only one type (the `loitering.zip` file only contains
+  records with type `loitering`).
 
 * `start`: UTC timestamp when the event started.
 
 * `end`: UTC timestamp when the event ended.
 
-* `lat`: Latitude of the mean position for the event.
+* `lat`: Latitude of the mean position for the event in decimal degrees.
 
-* `lon`: Longitude of the mean position for the event.
+* `lon`: Longitude of the mean position for the event in decimal degrees.
 
 * `vessel.id`: Internal unique identifier for the main vessel involved in the
   event. In the case of encounters this is the carrier vessel.
@@ -61,21 +73,21 @@ These are the columns that are included in the CSV files:
 * `vessel.flag`: Inferred flag for the main vessel, as determined from the MMSI
   midcode.
 
-* `vessel.origin_port.country`: Country ISO3 code for the origin port of the
-  main vessel at the time the event happened. Only available in encounter and
+* `vessel.origin_port.country`: Country ISO3 code for the port visited by the
+* main vessel at the start of the trip prior to the event. Only available in
+* encounter and loitering events.
+
+* `vessel.origin_port.name`: Port name for the port visited by the main vessel
+  at the start of the trip prior to the event. Only available in encounter and
   loitering events.
 
-* `vessel.origin_port.name`: Port name for the origin port of the main vessel
-  at the time the event happened. Only available in encounter and loitering
-  events.
-
-* `vessel.destination_port.country`: Country ISO3 code for the destination port
-  of the main vessel at the time the event happened. Only available in
+* `vessel.destination_port.country`: Country ISO3 code for the port visited by
+  the main vessel at the end of the trip after the event. Only available in
   encounter and loitering events.
 
-* `vessel.destination_port.name`: Port name for the destination port of the
-  main vessel at the time the event happened. Only available in encounter and
-  loitering events.
+* `vessel.destination_port.name`: Port name for the port visited by the main
+  vessel at the end of the trip after the event. Only available in encounter
+  and loitering events.
 
 * `vessel.authorizations.authorized`: List of RFMO's separated by a `|`
   character (i.e: `NPFC|SPRFMO`) where the event happened for which we've found
@@ -134,20 +146,20 @@ These are the columns that are included in the CSV files:
   encounter events.
 
 * `encounter.encountered_vessel.origin_port.country`: Country ISO3 code for the
-  origin port of the encountered fishing vessel at the time the event happened.
-  Only available in encounter events.
+  port visited by the encountered fishing vessel at the start of the trip prior
+  to the event.  Only available in encounter events.
 
-* `encounter.encountered_vessel.origin_port.name`: Port name for the origin
-  port of the encountered fishing vessel at the time the event happened. Only
-  available in encounter events.
+* `encounter.encountered_vessel.origin_port.name`: Port name for the port
+  visited by the encountered fishing vessel at the start of the trip prior to
+  the event. Only available in encounter events.
 
 * `encounter.encountered_vessel.destination_port.country`: Country ISO3 code
-  for the destination port of the encountered fishing vessel at the time the
-  event happened. Only available in encounter events.
+  for the port visited by the encountered fishing vessel at the end of the trip
+  after the event. Only available in encounter events.
 
-* `encounter.encountered_vessel.destination_port.name`: Port name for the
-  destination port of the encountered fishing vessel at the time the event
-  happened. Only available in encounter events.
+* `encounter.encountered_vessel.destination_port.name`: Port name for the port
+  visited by the encountered fishing vessel at the end of the trip after the
+  event. Only available in encounter events.
 
 * `encounter.encountered_vessel.authorizations.authorized`: List of RFMO's
   separated by a `|` character (i.e: `NPFC|SPRFMO`) where the event happened
@@ -166,10 +178,12 @@ These are the columns that are included in the CSV files:
   loitering. Only available in loitering events.
 
 * `port.lat`: Inferred latitude of the position for the anchorage inside the
-  port where the vessel docked. Only available in port events.
+  port where the vessel docked in decimal degrees. Only available in port
+  events.
 
 * `port.lon`: Inferred longitude of the position for the anchorage inside the
-  port where the vessel docked. Only available in port events.
+  port where the vessel docked in decimal degrees. Only available in port
+  events.
 
 * `port.country`: ISO3 code for the country owning the port where the vessel
   docked. Only available in port events.
