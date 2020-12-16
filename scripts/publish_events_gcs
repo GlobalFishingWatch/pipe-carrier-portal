@@ -87,39 +87,61 @@ fi
 echo "  Coverted events from JSON to CSV"
 
 ################################################################################
+# Zipping downloadable file
+################################################################################
+echo "Zipping downloadable file"
+LOCAL_ZIP_PATH=./data/zip
+LOCAL_ZIP_FILE=${LOCAL_ZIP_PATH}/${DEST_EVENT_TYPE}.zip
+echo "  Creating local ZIP directory"
+mkdir -p ${LOCAL_ZIP_PATH}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to create local ZIP directory"
+  exit 1
+fi
+echo "  Converting json events to csv format using script ${DEST_EVENT_TYPE}"
+zip -9 ${LOCAL_ZIP_FILE} ${LOCAL_CSV_FILE}
+if [ "$?" -ne 0 ]; then
+  echo "  Unable to ZIP CSV file"
+  exit 1
+fi
+echo "  Zipped CSV file"
+
+################################################################################
 # Push the data to cloud storage
 ################################################################################
-echo "Pushing the csv files to GCS at ${DEST_LOCATION}"
+echo "Pushing the zip file to GCS at ${DEST_LOCATION}"
 
-gsutil cp ${LOCAL_CSV_FILE} ${DEST_LOCATION}
+gsutil cp ${LOCAL_ZIP_FILE} ${DEST_LOCATION}/
 if [ "$?" -ne 0 ]; then
-  echo "  Unable to upload the CSV file ${LOCAL_CSV_FILE} to its target  location ${DEST_LOCATION}"
+  echo "  Unable to upload the ZIP file ${LOCAL_ZIP_FILE} to its target location ${DEST_LOCATION}"
   exit 1
 fi
 
 ################################################################################
-# Push the README to cloud storage
+# Push additional files cloud storage
 ################################################################################
-echo "Pushing the README files to GCS at ${DEST_LOCATION}"
+echo "Pushing additional files to GCS at ${DEST_LOCATION}"
 LOCAL_ADDITIONAL_PATH=./data/additional
-LOCAL_ADDITIONAL_FILES=${LOCAL_ADDITIONAL_PATH}/README.md
-README_TEMPLATE=${ASSETS}/downloadables/README.md
 echo "  Creating additional files directory"
 mkdir -p ${LOCAL_ADDITIONAL_PATH}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to create local additional files directory"
   exit 1
 fi
+
+echo "  Generating README fle"
+LOCAL_README_FILE=${LOCAL_ADDITIONAL_PATH}/README.md
+README_TEMPLATE=${ASSETS}/downloadables/README.md
 jinja2 ${README_TEMPLATE} \
   -D dataset_version=${DATASET_VERSION} \
-  > ${LOCAL_ADDITIONAL_FILES}
+  > ${LOCAL_README_FILE}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to render the README template"
   exit 1
 fi
-gsutil cp ${LOCAL_ADDITIONAL_FILES} ${DEST_LOCATION}
+gsutil cp ${LOCAL_ADDITIONAL_PATH}/* ${DEST_LOCATION}/
 if [ "$?" -ne 0 ]; then
-  echo "  Unable to upload the README file ${LOCAL_ADDITIONAL_FILES} to its target  location ${DEST_LOCATION}"
+  echo "  Unable to upload the additional files to its target location ${DEST_LOCATION}"
   exit 1
 fi
 

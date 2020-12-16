@@ -70,7 +70,6 @@ def record_to_csv_dict(record):
         "elevation_m": info["elevation_m"],
         "distance_from_shore_m": info["distance_from_shore_m"],
         "distance_from_port_m": info["distance_from_port_m"],
-        "regions.eez": "|".join(info["regions"]["eez"] or []),
         "regions.rfmo": "|".join(info["regions"]["rfmo"] or []),
         "encounter.median_distance_km": info["median_distance_km"],
         "encounter.authorization_status": authorization_status_to_public_status(info["authorization_status"]),

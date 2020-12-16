@@ -20,7 +20,6 @@ field_names = [
     "elevation_m",
     "distance_from_shore_m",
     "distance_from_port_m",
-    "regions.eez",
     "regions.rfmo",
     "encounter.median_distance_km",
     "encounter.authorization_status",

@@ -35,7 +35,6 @@ def record_to_csv_dict(record):
         "elevation_m": info["elevation_m"],
         "distance_from_shore_m": info["distance_from_shore_m"],
         "distance_from_port_m": info["distance_from_port_m"],
-        "regions.eez": "|".join(info["regions"]["eez"] or []),
         "regions.rfmo": "|".join(info["regions"]["rfmo"] or []),
         "loitering.total_distance_km": info["total_distance_km"],
         "loitering.loitering_hours": info["loitering_hours"],

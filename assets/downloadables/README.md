@@ -30,9 +30,6 @@ These are the files available in this dataset:
 
 * `port.zip`: Zipped CSV file containing all the port events.
 
-* `eez.zip`: Zipped CSV file containing all the EEZ's and their codes we use in
-  the event files.
-
 All event files share the same schema with the same columns.
 
 ### File schema
@@ -110,10 +107,6 @@ These are the columns that are included in the CSV files:
 
 * `distance_from_port_m`: Distance from the closest port at the mean position
   of the event, in meters.
-
-* `regions.eez`: List of EEZ ids separated by a `|` where the event happened.
-  See the `eez.zip` file for a mapping between the ids used here and the
-  countries.
 
 * `regions.rfmo`: List of RFMOs separated by a `|` character where the event
   happened. This is the complete list of RFMO's where the event happened,
