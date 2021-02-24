@@ -28,24 +28,17 @@ WITH
   WHERE
     `rank` = 1 ),
   --
-  -- Duplicate encounters so that we have an event for each vessel.
+  -- We need to have only carrier events
   --
-  duplicate_encounters AS (
+  carrier_encounters AS (
   SELECT
     carrier_vessel_id AS vessel_id,
     fishing_vessel_id AS encountered_vessel_id,
-    CONCAT(TO_HEX(MD5(preliminary_event_id)), ".1") AS event_id,
+    TO_HEX(MD5(preliminary_event_id)) AS event_id,
     *
   FROM
     deduplicated_complete_encounter_events
-  UNION ALL
-  SELECT
-    fishing_vessel_id AS vessel_id,
-    carrier_vessel_id AS encountered_vessel_id,
-    CONCAT(TO_HEX(MD5(preliminary_event_id)), ".2") AS event_id,
-    *
-  FROM
-    deduplicated_complete_encounter_events),
+  ),
   --
   -- Main events query
   --
@@ -120,7 +113,7 @@ WITH
     ]) AS event_vessels,
     ST_GEOGFROMTEXT(CONCAT('POINT (', CAST(mean_longitude AS string), ' ', CAST(mean_latitude AS string), ')')) AS event_geography
   FROM
-    duplicate_encounters)
+    carrier_encounters)
 
 SELECT
   *
