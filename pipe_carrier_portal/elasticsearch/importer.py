@@ -1,75 +1,63 @@
 """Short script to imports vessel information into elastic search."""
 
-import json
 import sys
 import datetime as dt
-import itertools as it
 import json
-import re
-from pipe_carrier_portal.elasticsearch.server import ElasticSearchServer
-
-
-def batch(iterable, size):
-    args = [iter(iterable)] * size
-    return it.izip_longest(*args)
-
-def line_to_elasticsearch_bulk_command(line):
-    record = json.loads(line)
-    command = {"index": {"_index": unique_index_name,
-                         "_id": record["vesselId"]}}
-    return [command, record]
-
+import elasticsearch
+import elasticsearch.helpers
 
 
 # Configuration options
 server_url = sys.argv[1]
-server_auth = sys.argv[2]
-index_name = sys.argv[3]
-index_schema = sys.argv[4]
+index_name = sys.argv[2]
+index_schema = sys.argv[3]
 
 # Derived configuration options
 timestamp = dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-unique_index_name = '{}-{}'.format(index_name, timestamp)
+unique_index_name = f"{index_name}-{timestamp}"
 
 # Open a base http connection to elasticsearch server
-server = ElasticSearchServer(server_url, server_auth)
+server = elasticsearch.Elasticsearch(server_url)
 
 # Get where the current alias is pointing to later remove old indices
-print "Obtaining alias information for the current index"
-alias_info = server.alias_information(index_name)
-old_indices = list(alias_info.keys())
-print "The alias is currently pointing to {}".format(old_indices)
+try:
+    print("Obtaining alias information for the current index")
+    alias_info = server.indices.get_alias(name=index_name)
+    old_indices = alias_info.keys()
+    print(f"The alias is currently pointing to {old_indices}")
+except Exception as e:
+    print("The alias is not currently pointing at anything")
+    old_indices = {}
 
 # Precreate the index so that we can setup proper mappings
-print "Creating index {}".format(unique_index_name)
-server.create_index(unique_index_name, index_schema)
+print(f"Creating index {unique_index_name}")
+server.indices.create(unique_index_name, body=index_schema)
+
+# Use the bulk helper to load all the data into ES
+def line_to_elasticsearch_document(line):
+    record = json.loads(line)
+    return {
+        "_id": record.get("vesselId"),
+        "_source": record,
+    }
+
 
 try:
-    # Process the records in batches
-    bulk_commands = it.imap(
-        line_to_elasticsearch_bulk_command, iter(sys.stdin))
-    batched_commands = batch(bulk_commands, 5000)
-
-    # For each batch, push it as a bulk payload
-    for batch in batched_commands:
-        print "Indexing batch"
-        server.bulk(it.ifilter(lambda x: x is not None, batch))
+    print(f"Loading bulk data into index {unique_index_name}")
+    bulk_actions = map(line_to_elasticsearch_document, iter(sys.stdin))
+    elasticsearch.helpers.bulk(server, bulk_actions, index=unique_index_name)
 
     # Update the alias to point to the new index
-    print "Updating index alias which was pointing to {} to point to the new index {}".format(
-        old_indices, unique_index_name)
-    server.alias({
-        "actions": [
-            {"add": {"index": unique_index_name, "alias": index_name}},
-        ]
-    })
+    print(f"Updating index alias to the new index {unique_index_name}")
+    server.indices.put_alias(unique_index_name, index_name)
 except Exception as e:
-    print "Exception while importing records to elastic search. {}".format(e)
-    print "Removing new index {}  as the import process failed".format(
-        unique_index_name)
-    server.drop_index(unique_index_name)
+    print(f"Exception while importing records to elastic search. {e}")
+    print(f"Removing new index {unique_index_name} as the import process failed")
+
+    server.indices.delete(unique_index_name)
     raise
 
 # Remove the old indices
+print(f"Removing old indices {old_indices}")
 for old_index in old_indices:
-    server.drop_index(old_index)
+    server.indices.delete(old_index)

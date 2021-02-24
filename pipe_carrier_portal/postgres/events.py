@@ -6,7 +6,7 @@ import re
 
 csv_file = sys.argv[1]
 
-with open(csv_file, "wb+") as f:
+with open(csv_file, "w", newline='', encoding='utf-8') as f:
     writer = csv.writer(f)
 
     for line in sys.stdin:
@@ -24,9 +24,9 @@ with open(csv_file, "wb+") as f:
                 record['event_start'],
                 record.get('event_end'),
                 record['event_info'],
-                ''.join([s.encode('utf-8') for s in record['event_vessels']]),
+                record['event_vessels'],
                 normalized_mean_position
             ])
         except:
-            print("Unable to convert record to csv at {}".format(record))
+            print(f"Unable to convert record to csv at {record}")
             raise

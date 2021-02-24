@@ -6,12 +6,3 @@ services:
     volumes:
       - ".:/opt/project"
       - "~/.config/gcloud:/root/.config/gcloud"
-
-  py.test:
-    image: gfw/pipe-carrier-portal
-    build: .
-    entrypoint:
-      - py.test
-    volumes:
-      - ".:/opt/project"
-      - "~/.config/gcloud:/root/.config/gcloud"
