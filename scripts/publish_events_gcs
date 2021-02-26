@@ -9,6 +9,7 @@ ARGS=( \
   DEST_LOCATION \
   DEST_EVENT_TYPE \
   DATASET_VERSION \
+  TEMP_DATASET \
 )
 
 ################################################################################
@@ -31,6 +32,25 @@ for index in ${!ARGS[*]}; do
   echo "  ${ARGS[$index]}=${ARG_VALUES[$index]}"
   declare "${ARGS[$index]}"="${ARG_VALUES[$index]}"
 done
+
+################################################################################
+# First generate intermediate events results into a temp table. (Only encounters)
+################################################################################
+if [ "${DEST_EVENT_TYPE}" = "encounter" ]; then
+  echo "Generating intermediate results table"
+  UUID="$(uuidgen)-temp-carriers"
+  INTERMEDIATE_TABLE="${TEMP_DATASET}.${UUID//-/_}"
+  SQL=${ASSETS}/bigquery/events-carrier-encounter-events.sql.j2
+  jinja2 ${SQL} \
+    -D encounter_events_table=${SOURCE//:/.} \
+    | bq query --max_rows=0 --allow_large_results --replace --destination_table ${INTERMEDIATE_TABLE}
+
+  if [ "$?" -ne 0 ]; then
+    echo "  Unable to insert records for table ${INTERMEDIATE_TABLE}"
+    exit 1
+  fi
+fi
+
 ################################################################################
 # Export events to json files
 ################################################################################
@@ -143,6 +163,19 @@ gsutil cp ${LOCAL_ADDITIONAL_PATH}/* ${DEST_LOCATION}/
 if [ "$?" -ne 0 ]; then
   echo "  Unable to upload the additional files to its target location ${DEST_LOCATION}"
   exit 1
+fi
+
+################################################################################
+# Remove the intermediate results table. (Only encounters)
+################################################################################
+if [ "${DEST_EVENT_TYPE}" = "encounter" ]; then
+  echo "Deleting intermediate results table"
+  bq rm -t -f ${INTERMEDIATE_TABLE}
+
+  if [ "$?" -ne 0 ]; then
+    echo "  Unable to remove intermediate table ${INTERMEDIATE_TABLE}"
+    exit 1
+  fi
 fi
 
 echo "  Done importing data"

@@ -1,0 +1,12 @@
+#standardSQL
+{% include 'util.sql.j2' %}
+WITH encounter_events_filter_by_carrier_type AS (
+    SELECT
+      *
+    FROM
+      `{{ encounter_events_table }}`
+)
+
+SELECT
+    *
+FROM encounter_events_filter_by_carrier_type
