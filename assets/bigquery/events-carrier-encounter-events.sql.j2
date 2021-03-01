@@ -5,6 +5,8 @@ WITH encounter_events_filter_by_carrier_type AS (
       *
     FROM
       `{{ encounter_events_table }}`
+    WHERE (JSON_EXTRACT_SCALAR(event_vessels, "$[0].type") = 'carrier' AND JSON_EXTRACT_SCALAR(event_vessels, "$[0].id") = vessel_id)
+        OR (JSON_EXTRACT_SCALAR(event_vessels, "$[1].type") = 'carrier' AND JSON_EXTRACT_SCALAR(event_vessels, "$[1].id") = vessel_id)
 )
 
 SELECT
