@@ -8,8 +8,7 @@ ARGS=( \
   TEMP_BUCKET \
   DEST_LOCATION \
   DEST_EVENT_TYPE \
-  DATASET_VERSION \
-  TEMP_DATASET \
+  DATASET_VERSION
 )
 
 ################################################################################
