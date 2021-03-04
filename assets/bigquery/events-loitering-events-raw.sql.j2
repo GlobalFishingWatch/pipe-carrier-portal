@@ -22,7 +22,7 @@ WITH
   FROM
     `{{ research_messages }}`
   WHERE
-    date BETWEEN TIMESTAMP("{{ start_date }}")
+    timestamp BETWEEN TIMESTAMP("{{ start_date }}")
     AND TIMESTAMP("{{ end_date }}") ),
   ------------------------------------------------------
   -- What is a carrier mmsi? This selects these vessels.

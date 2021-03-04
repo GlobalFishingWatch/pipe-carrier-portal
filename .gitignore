@@ -115,4 +115,7 @@ output/
 
 .pytest_cache/
 
-run-all.sh
+run-publish-scripts.sh
+run-generate-scripts.sh
+
+data
