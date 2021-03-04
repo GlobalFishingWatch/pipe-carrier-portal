@@ -38,7 +38,7 @@ done
 if [ "${DEST_EVENT_TYPE}" = "encounter" ]; then
   echo "Generating intermediate results table"
   UUID="$(uuidgen)-temp-carriers"
-  INTERMEDIATE_TABLE="${TEMP_DATASET}.${UUID//-/_}"
+  INTERMEDIATE_TABLE="${TEMP_BUCKET}.${UUID//-/_}"
   SQL=${ASSETS}/bigquery/events-carrier-encounter-events.sql.j2
   jinja2 ${SQL} \
     -D encounter_events_table=${SOURCE//:/.} \
