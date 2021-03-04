@@ -49,6 +49,9 @@ if [ "${DEST_EVENT_TYPE}" = "encounter" ]; then
     echo "  Unable to insert records for table ${INTERMEDIATE_TABLE}"
     exit 1
   fi
+
+else
+  INTERMEDIATE_TABLE=$SOURCE
 fi
 
 ################################################################################
@@ -59,13 +62,13 @@ TEMP_PATH=gs://${TEMP_BUCKET}/pipe-carrier-portal/$( date -u "+%FT%T.%N" )
 EXTRACT_PATH=$TEMP_PATH/bq/*.json
 bq extract \
   --destination_format=NEWLINE_DELIMITED_JSON \
-  $SOURCE \
+  $INTERMEDIATE_TABLE \
   $EXTRACT_PATH
 if [ "$?" -ne 0 ]; then
-  echo "  Unable to extract ${SOURCE} to ${EXTRACT_PATH}"
+  echo "  Unable to extract ${INTERMEDIATE_TABLE} to ${EXTRACT_PATH}"
   exit 1
 fi
-echo "  Exported events from ${SOURCE} to ${EXTRACT_PATH}"
+echo "  Exported events from ${INTERMEDIATE_TABLE} to ${EXTRACT_PATH}"
 
 ################################################################################
 # Download the json files locally as it's much faster
