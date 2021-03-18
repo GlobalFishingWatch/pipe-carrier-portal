@@ -135,11 +135,15 @@ WITH
       `pipe_static.regions`,
       UNNEST(regions.rfmo) rfmo
     WHERE
-      rfmo IN ("WCPFC",
-        "CCSBT",
-        "IATTC",
+      rfmo IN (
         "ICCAT",
-        "IOTC")
+        "IOTC",
+        "WCPFC",
+        "IATTC",
+        "CCSBT",
+        "SPRFMO",
+        "NPFC"
+      )
     GROUP BY
       1 )
   USING
