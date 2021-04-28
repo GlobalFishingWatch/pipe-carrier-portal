@@ -9,7 +9,8 @@ display_usage() {
 	echo "  generate_carrier_anchorage_events  publish carrier-specific anchorage (carrier docking at anchorage) events"
 	echo "  publish_vessel_tracks              publish tracks of vessels related to the carrier portal to postgres"
 	echo "  publish_vessel_info                export the vessel information related to carrier portal vessels to elastic search"
-  echo "  publish_events                     publish events of a given bigquery table to a postgres database"
+  echo "  publish_events_postgres            publish events of a given bigquery table to a postgres database"
+  echo "  publish_events_gcs                 publish events of a given bigquery table to CSV files in a GCS bucket"
 	}
 
 
@@ -42,9 +43,13 @@ case $1 in
     ${THIS_SCRIPT_DIR}/publish_vessel_info "${@:2}"
     ;;
 
-  publish_events)
-    ${THIS_SCRIPT_DIR}/publish_events "${@:2}"
+  publish_events_postgres)
+    ${THIS_SCRIPT_DIR}/publish_events_postgres "${@:2}"
     ;;
+
+	publish_events_gcs)
+		${THIS_SCRIPT_DIR}/publish_events_gcs "${@:2}"
+		;;
 
   *)
     display_usage

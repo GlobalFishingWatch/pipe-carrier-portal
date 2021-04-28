@@ -19,6 +19,8 @@ Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
   encounters. Adds new functionality to enable or disable specific event types
   from an installation. Adds new functionality which allows an installation to
   specify source filters for a given event type.
+* [Engeneering Incubator and chores/ENG-90](https://globalfishingwatch.atlassian.net/browse/ENG-90): Adds support for ES7
+
 
 ## v1.4.1 - 2019-09-10
 

@@ -19,7 +19,7 @@ WITH
   FROM
     `{{ messages }}`
   WHERE
-    date BETWEEN '{{start}}'
+    timestamp BETWEEN '{{start}}'
     AND '{{end}}' ),
   source_segment_info AS (
   SELECT

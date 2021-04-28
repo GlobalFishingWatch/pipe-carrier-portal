@@ -33,7 +33,7 @@ RUN \
   apt-get -y install postgresql-client
 
 # Install some commandline utilities for the scripts we run here
-RUN apt-get install -y uuid-runtime netcat jshon
+RUN apt-get install -y uuid-runtime netcat jshon zip
 
 # Setup local application dependencies
 COPY . /opt/project

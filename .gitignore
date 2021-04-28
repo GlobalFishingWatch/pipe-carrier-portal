@@ -114,3 +114,8 @@ output/
 .DS_Store
 
 .pytest_cache/
+
+run-publish-scripts.sh
+run-generate-scripts.sh
+
+data
