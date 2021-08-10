@@ -77,7 +77,7 @@ WITH
       vessel_id
     FROM
       all_unique_vessel_ids) ),
-  --
+ --
   --
   --
   port_stop_gaps_onvoyages AS (
@@ -87,7 +87,7 @@ WITH
     CONCAT(vessel_id,',', SAFE_CAST(start_timestamp AS string),',',SAFE_CAST(start_lat AS string),',', SAFE_CAST(start_lon AS string),',', SAFE_CAST(end_timestamp AS string),',',SAFE_CAST(end_lat AS string),',', SAFE_CAST(end_lon AS string),',', SAFE_CAST(end_anchorage_id AS string),',',SAFE_CAST(start_anchorage_id AS STRING)) AS unique_id
   FROM (
     SELECT
-      events.vessel_id AS vessel_id,
+      vessel_id,
       start_timestamp,
       start_lat,
       start_lon,
@@ -106,7 +106,7 @@ WITH
       event_type IN ('PORT_STOP_BEGIN',
         'PORT_STOP_END',
         'PORT_GAP')
-      AND events.vessel_id IN (
+      AND vessel_id IN (
       SELECT
         vessel_id
       FROM
@@ -362,7 +362,7 @@ WITH
     CONCAT(vessel_id,',', SAFE_CAST(start_timestamp AS string),',',SAFE_CAST(start_lat AS string),',', SAFE_CAST(start_lon AS string),',', SAFE_CAST(end_timestamp AS string),',',SAFE_CAST(end_lat AS string),',', SAFE_CAST(end_lon AS string),',', SAFE_CAST(end_anchorage_id AS string),',',SAFE_CAST(start_anchorage_id AS STRING)) AS unique_id
   FROM (
     SELECT
-      events.vessel_id AS vessel_id,
+      vessel_id,
       start_timestamp,
       vessel_lat,
       vessel_lon,
@@ -381,7 +381,7 @@ WITH
       UNNEST(events) events
     WHERE
       event_type IN ('PORT_ENTRY')
-      AND events.vessel_id IN (
+      AND vessel_id IN (
       SELECT
         vessel_id
       FROM
