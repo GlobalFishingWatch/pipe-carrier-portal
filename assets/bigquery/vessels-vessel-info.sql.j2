@@ -8,12 +8,14 @@ WITH
   SELECT
     *
   FROM
-    `{{ encounter_events }}` ),
+    `{{ encounter_events }}`
+  WHERE event_start >= '2017-01-01' ),
   source_published_events_loitering AS (
   SELECT
     *
   FROM
-    `{{ loitering_events }}` ),
+    `{{ loitering_events }}`
+  WHERE event_start >= '2017-01-01' ),
   source_vessel_info AS (
   SELECT
     *
