@@ -6,15 +6,12 @@ THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 ASSETS=${THIS_SCRIPT_DIR}/../assets
 ARGS=( \
   DATE_RANGE \
-  SOURCE_ENCOUNTER_EVENTS \
-  SOURCE_LOITERING_EVENTS \
-  SOURCE_VESSEL_INFO \
-  SOURCE_VESSEL_DATABASE \
-  SOURCE_SPATIAL_MEASURES \
-  SOURCE_PORT_VISITS \
-  SOURCE_NAMED_ANCHORAGES \
-  SOURCE_COUNTRY_CODES \
-  MIN_STOP_LENGTH \
+  PUBLISHED_EVENTS_PORT_VISITS \
+  PUBLISHED_EVENTS_ENCOUNTERS \
+  PUBLISHED_EVENTS_LOITERING \
+  VESSEL_INFO \
+  CONFIDENCE \
+  MIN_EVENT_HOURS \
   DEST_TABLE \
 )
 
@@ -75,15 +72,12 @@ SQL=${ASSETS}/bigquery/events-anchorage-events.sql.j2
 jinja2 ${SQL} \
   -D start_date=${START_DATE} \
   -D end_date=${END_DATE} \
-  -D encounter_events=${SOURCE_ENCOUNTER_EVENTS//:/.} \
-  -D loitering_events=${SOURCE_LOITERING_EVENTS//:/.} \
-  -D vessel_info=${SOURCE_VESSEL_INFO//:/.} \
-  -D vessel_database=${SOURCE_VESSEL_DATABASE//:/.} \
-  -D port_visits=${SOURCE_PORT_VISITS//:/.} \
-  -D named_anchorages=${SOURCE_NAMED_ANCHORAGES//:/.} \
-  -D spatial_measures=${SOURCE_SPATIAL_MEASURES//:/.} \
-  -D country_codes=${SOURCE_COUNTRY_CODES//:/.} \
-  -D min_stop_length=${MIN_STOP_LENGTH} \
+  -D published_events_port_visits=${PUBLISHED_EVENTS_PORT_VISITS//:/.} \
+  -D published_events_encounters=${PUBLISHED_EVENTS_ENCOUNTERS//:/.} \
+  -D published_events_loitering=${PUBLISHED_EVENTS_LOITERING//:/.} \
+  -D vessel_info=${VESSEL_INFO//:/.} \
+  -D confidence=${CONFIDENCE//:/.} \
+  -D min_event_hours=${MIN_EVENT_HOURS//:/.} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
 
 if [ "$?" -ne 0 ]; then
