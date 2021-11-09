@@ -62,6 +62,7 @@ WITH
     )
 
     SELECT
+        event_id,
         'port' AS event_type,
         vessel_id,
         event_start,
@@ -76,11 +77,11 @@ WITH
             ROUND(lat_mean,6) AS anchorage_lat,
             ROUND(lon_mean,6) AS anchorage_lon,
             STRUCT(
-                JSON_QUERY(mean_anchorage_info, '$.anchorage_id') AS `anchorage_id`,
-                JSON_QUERY(mean_anchorage_info, '$.id') AS `id`,
-                JSON_QUERY(mean_anchorage_info, '$.name') AS `name`,
-                JSON_QUERY(mean_anchorage_info, '$.top_destination') AS `top_destination`,
-                JSON_QUERY(mean_anchorage_info, '$.flag') AS `flag`
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.anchorage_id'), '\"', '') AS `anchorage_id`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.id'), '\"', '') AS `id`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.name'), '\"', '') AS `name`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.top_destination'), '\"', '') AS `top_destination`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.flag'), '\"', '') AS `flag`
             ) AS anchorage,
             STRUCT(
                 IF (regions_mean_position IS NULL, [], regions_mean_position.eez) AS eez,
