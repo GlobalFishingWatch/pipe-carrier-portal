@@ -15,7 +15,7 @@ WITH
       SELECT
         *
       FROM
-        {{ segment_info }}`
+        `{{ segment_info }}`
   ),
   source_spatial_measures AS (
       SELECT
@@ -39,7 +39,7 @@ WITH
       SELECT
         *
       FROM
-        {{ named_anchorages }}`
+        `{{ named_anchorages }}`
   ),
   source_segs AS (
       SELECT
