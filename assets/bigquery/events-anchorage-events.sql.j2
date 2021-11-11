@@ -36,11 +36,13 @@ WITH
             DISTINCT vessel_id
         FROM
             source_published_events_encounters
+        WHERE event_start >= '{{ start_date }}'
         UNION DISTINCT
         SELECT
             DISTINCT vessel_id
         FROM
             source_published_events_loitering
+        WHERE event_start >= '{{ start_date }}'
     ),
 
     deduplicate_all_unique_vessel_ids AS (
