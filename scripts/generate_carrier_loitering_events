@@ -14,6 +14,7 @@ ARGS=( \
   SOURCE_NAMED_ANCHORAGES \
   SOURCE_RESEARCH_SEGS \
   SOURCE_CARRIER_VESSELS_BYYEAR_V \
+  MIN_EVENT_HOURS \
   DEST_TABLE \
 )
 
@@ -72,6 +73,8 @@ echo "  Events table exists"
 echo "Generating loitering events at ${DEST_TABLE}"
 SQL=${ASSETS}/bigquery/events-loitering-events.sql.j2
 jinja2 ${SQL} \
+  -D start_date=${START_DATE} \
+  -D end_date=${END_DATE} \
   -D source_published_loitering_events=${SOURCE_PUBLISHED_LOITERING_EVENTS//:/.} \
   -D segment_info=${SOURCE_SEGMENT_INFO//:/.} \
   -D spatial_measures=${SOURCE_SPATIAL_MEASURES//:/.} \
@@ -79,6 +82,7 @@ jinja2 ${SQL} \
   -D voyages_c4=${SOURCE_VOYAGES_C4//:/.} \
   -D named_anchorages=${SOURCE_NAMED_ANCHORAGES//:/.} \
   -D segs=${SOURCE_RESEARCH_SEGS//:/.} \
+  -D min_event_hours=${MIN_EVENT_HOURS//:/.} \
   -D carrier_vessels_byyear_v=${SOURCE_CARRIER_VESSELS_BYYEAR_V//:/.} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${DEST_TABLE}
 
