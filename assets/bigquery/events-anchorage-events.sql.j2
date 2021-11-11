@@ -1,505 +1,103 @@
 #standardSQL
 {% include 'util.sql.j2' %}
+
 WITH
-  --
-  -- Declare the source tables we are going to use through the entire query
-  --
-  source_published_events_encounters AS (
-  SELECT
-    *
-  FROM
-    `{{ encounter_events }}` ),
-  source_published_events_loitering AS (
-  SELECT
-    *
-  FROM
-    `{{ loitering_events }}` ),
-  source_vessel_info AS (
-  SELECT
-    *
-  FROM
-    `{{ vessel_info }}` ),
-  source_vessel_database AS (
-  SELECT
-    *
-  FROM
-    `{{ vessel_database }}` ),
-  source_port_events AS (
-  SELECT
-    *
-  FROM
-    `{{ port_visits }}` ),
-  source_named_anchorages AS (
-  SELECT
-    *
-  FROM
-    `{{ named_anchorages }}` ),
-  source_spatial_measures AS (
+    source_port_visits_events AS (
+        SELECT
+            *,
+        FROM
+            `{{ published_events_port_visits }}`
+        WHERE event_start BETWEEN '{{ start_date }}' AND '{{ end_date }}'
+    ),
+
+    source_published_events_encounters AS (
+        SELECT *
+        FROM `{{ published_events_encounters }}`
+    ),
+
+    source_published_events_loitering AS (
+        SELECT *
+        FROM `{{ published_events_loitering }}`
+    ),
+
+    source_vessel_info AS (
+        SELECT *
+        FROM `{{ vessel_info }}`
+    ),
+
+    #
+    # Select all unique vessel ids. This is required because each vessel may
+    # participate in multiple encounters, or may participate as a carrier in
+    # some and as a donnor in other (in carrier-carrier encounters)
+    #
+
+    all_unique_vessel_ids AS (
+        SELECT
+            DISTINCT vessel_id
+        FROM
+            source_published_events_encounters
+        WHERE event_start >= '{{ start_date }}'
+        UNION DISTINCT
+        SELECT
+            DISTINCT vessel_id
+        FROM
+            source_published_events_loitering
+        WHERE event_start >= '{{ start_date }}'
+    ),
+
+    deduplicate_all_unique_vessel_ids AS (
+      SELECT DISTINCT vessel_id FROM all_unique_vessel_ids
+    ),
+
+    #
+    # Extract mean anchorage info. Filter by confidence & event duration
+    #
+
+    port_visit_with_mean_anchorage_info AS (
+        SELECT
+            *,
+            JSON_QUERY(event_info, '$.intermediate_anchorage') AS mean_anchorage_info
+        FROM source_port_visits_events
+           JOIN deduplicate_all_unique_vessel_ids USING (vessel_id)
+        WHERE CAST(JSON_QUERY(event_info, '$.confidence') AS int64) = {{ confidence }}
+            AND TIMESTAMP_DIFF(event_end, event_start, HOUR) >= {{ min_event_hours }}
+    )
+
     SELECT
-      *
-    FROM
-      `{{ spatial_measures }}`
-  ),
-  source_country_codes AS (
-  SELECT
-    *
-  FROM
-    `{{ country_codes }}` ),
-  --
-  -- Select all unique vessel ids. This is required because each vessel may
-  -- participate in multiple encounters, or may participate as a carrier in
-  -- some and as a donnor in other (in carrier-carrier encounters)
-  --
-  all_unique_vessel_ids AS (
-  SELECT
-    DISTINCT vessel_id
-  FROM
-    source_published_events_encounters
-  UNION DISTINCT
-  SELECT
-    DISTINCT vessel_id
-  FROM
-    source_published_events_loitering),
-  --
-  -- Group each port visit with it's lead
-  --
-  port_vists AS (
-  SELECT
-    *,
-    CONCAT(vessel_id,',', SAFE_CAST(start_timestamp AS string),',',SAFE_CAST(start_lat AS string),',', SAFE_CAST(start_lon AS string),',', SAFE_CAST(end_timestamp AS string),',',SAFE_CAST(end_lat AS string),',', SAFE_CAST(end_lon AS string),',', SAFE_CAST(end_anchorage_id AS string),',',SAFE_CAST(start_anchorage_id AS STRING)) AS unique_id
-  FROM
-    source_port_events
-  WHERE
-    ---removed start and end time entries and temporarily filled with real ones
-    start_timestamp BETWEEN '{{ start_date }}' AND '{{ end_date }}'
-    AND vessel_id IN (
-    SELECT
-      vessel_id
-    FROM
-      all_unique_vessel_ids) ),
- --
-  --
-  --
-  port_stop_gaps_onvoyages AS (
-  SELECT
-    * EXCEPT(s2id),
-    CONCAT(label,',',iso3) AS port_label,
-    CONCAT(vessel_id,',', SAFE_CAST(start_timestamp AS string),',',SAFE_CAST(start_lat AS string),',', SAFE_CAST(start_lon AS string),',', SAFE_CAST(end_timestamp AS string),',',SAFE_CAST(end_lat AS string),',', SAFE_CAST(end_lon AS string),',', SAFE_CAST(end_anchorage_id AS string),',',SAFE_CAST(start_anchorage_id AS STRING)) AS unique_id
-  FROM (
-    SELECT
-      vessel_id,
-      start_timestamp,
-      start_lat,
-      start_lon,
-      start_anchorage_id,
-      end_timestamp,
-      end_lat,
-      end_lon,
-      end_anchorage_id,
-      timestamp,
-      anchorage_id,
-      event_type
-    FROM
-      port_vists,
-      UNNEST(events) events
-    WHERE
-      event_type IN ('PORT_STOP_BEGIN',
-        'PORT_STOP_END',
-        'PORT_GAP')
-      AND vessel_id IN (
-      SELECT
-        vessel_id
-      FROM
-        all_unique_vessel_ids)) a
-  JOIN (
-    SELECT
-      s2id,
-      lat,
-      lon,
-      label_f AS label,
-      label_source,
-      top_destination,
-      iso3,
-      distance_from_shore_m,
-      at_dock
-    FROM (
-      SELECT
-        s2id,
-        lat,
-        lon,
-      IF
-        (sublabel LIKE '%CANAL%'
-          AND iso3 = 'PAN',
-          sublabel,
-          label) label_f,
-        label_source,
-        top_destination,
-        iso3,
-        distance_from_shore_m,
-        at_dock
-      FROM
-        source_named_anchorages)) b
-  ON
-    a.anchorage_id = b.s2id
-  GROUP BY
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,
-    21),
-  --
-  --
-  --
-  get_port_stops AS (
-  SELECT
-    *
-  FROM
-    port_stop_gaps_onvoyages
-  WHERE
-    event_type IN ('PORT_STOP_BEGIN',
-      'PORT_STOP_END')),
-  --
-  --
-  --
-  calc_stop_duration AS (
-  SELECT
-    *,
-  IF
-    (stop_duration IS NULL,
-      123456789,
-      stop_duration) AS stop_duration_f
-  FROM (
-    SELECT
-      *,
-      ROUND(TIMESTAMP_DIFF(next_port_event_time, timestamp, SECOND)/3600, 6) AS stop_duration
-    FROM (
-      SELECT
-        *,
-        LEAD(timestamp) OVER (PARTITION BY vessel_id, start_timestamp, SAFE_CAST(start_lat AS int64),
-          SAFE_CAST(start_lon AS int64),
-          start_anchorage_id,
-          end_timestamp,
-          end_anchorage_id
-        ORDER BY
-          timestamp) AS next_port_event_time
-      FROM
-        get_port_stops)
-    WHERE
-      event_type = 'PORT_STOP_BEGIN' )),
-  --
-  --
-  --
-  longest_port_stop AS (
-  SELECT
-    vessel_id,
-    unique_id,
-    start_timestamp,
-    start_lat,
-    start_lon,
-    start_anchorage_id,
-    end_timestamp,
-    end_lat,
-    end_lon,
-    end_anchorage_id,
-    timestamp,
-    anchorage_id,
-    event_type,
-    lat,
-    lon,
-    label,
-    label_source,
-    top_destination,
-    iso3,
-    distance_from_shore_m,
-    at_dock
-  FROM (
-    SELECT
-      *
-    FROM (
-      SELECT
+        event_id,
+        'port' AS event_type,
         vessel_id,
-        unique_id,
-        start_timestamp,
-        start_lat,
-        start_lon,
-        start_anchorage_id,
-        end_timestamp,
-        end_lat,
-        end_lon,
-        end_anchorage_id,
-        timestamp,
-        anchorage_id,
-        event_type,
-        lat,
-        lon,
-        label,
-        label_source,
-        top_destination,
-        iso3,
-        distance_from_shore_m,
-        at_dock,
-        CASE
-          WHEN LAG(unique_id) OVER (PARTITION BY unique_id ORDER BY timestamp) = unique_id THEN 'duplicate'
-        ELSE
-        NULL
-      END
-        AS Dups
-      FROM (
-        SELECT
-          *
-        FROM
-          calc_stop_duration) a
-      JOIN (
-        SELECT
-          unique_id AS unique_id1,
-          MAX(stop_duration_f) max_stop_duration
-        FROM
-          calc_stop_duration
-        GROUP BY
-          unique_id1) b
-      ON
-        a.unique_id = b.unique_id1
-        AND a.stop_duration_f = b.max_stop_duration )
-    WHERE
-      Dups IS NULL ) ),
-  --
-  --
-  --
-  port_gap_visits AS (
-  SELECT
-    *
-  FROM (
-    SELECT
-      *
-    FROM
-      port_stop_gaps_onvoyages
-    WHERE
-      event_type = 'PORT_GAP'
-      AND unique_id NOT IN (
-      SELECT
-        unique_id
-      FROM
-        longest_port_stop) )),
-  --
-  --
-  --
-  port_gap_voyage_ends AS (
-  SELECT
-    vessel_id,
-    unique_id,
-    start_timestamp,
-    start_lat,
-    start_lon,
-    start_anchorage_id,
-    end_timestamp,
-    end_lat,
-    end_lon,
-    end_anchorage_id,
-    timestamp,
-    anchorage_id,
-    event_type,
-    lat,
-    lon,
-    label,
-    label_source,
-    top_destination,
-    iso3,
-    distance_from_shore_m,
-    at_dock
-  FROM (
-    SELECT
-      *
-    FROM
-      port_gap_visits) a
-  JOIN (
-    SELECT
-      unique_id AS unique_id1,
-      MIN(timestamp) min_timestamp
-    FROM
-      port_gap_visits
-    GROUP BY
-      unique_id1 ) b
-  ON
-    a.unique_id = b.unique_id1
-    AND a.timestamp = b.min_timestamp),
-  --
-  --
-  --
-  port_labels_clean AS (
-  SELECT
-    *
-  FROM
-    longest_port_stop
-  UNION ALL
-  SELECT
-    *
-  FROM
-    port_gap_voyage_ends
-  ORDER BY
-    timestamp),
-  --
-  -- Only group clean port events, port entries and then an optional exit
-  --
-  port_entries AS(
-  SELECT
-    *,
-    CONCAT(vessel_id,',', SAFE_CAST(start_timestamp AS string),',',SAFE_CAST(start_lat AS string),',', SAFE_CAST(start_lon AS string),',', SAFE_CAST(end_timestamp AS string),',',SAFE_CAST(end_lat AS string),',', SAFE_CAST(end_lon AS string),',', SAFE_CAST(end_anchorage_id AS string),',',SAFE_CAST(start_anchorage_id AS STRING)) AS unique_id
-  FROM (
-    SELECT
-      vessel_id,
-      start_timestamp,
-      vessel_lat,
-      vessel_lon,
-      start_lat,
-      start_lon,
-      start_anchorage_id,
-      end_timestamp,
-      end_lat,
-      end_lon,
-      end_anchorage_id,
-      timestamp,
-      anchorage_id,
-      event_type
-    FROM
-      port_vists,
-      UNNEST(events) events
-    WHERE
-      event_type IN ('PORT_ENTRY')
-      AND vessel_id IN (
-      SELECT
-        vessel_id
-      FROM
-        all_unique_vessel_ids)
-    GROUP BY
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14)),
-  --
-  --
-  --
-  port_entry_merged_info AS(
-  SELECT
-    *
-  FROM (
-    SELECT
-      *
-    FROM
-      port_labels_clean)a
-  LEFT JOIN (
-    SELECT
-      unique_id AS unique_id1,
-      vessel_lat,
-      vessel_lon
-    FROM
-      port_entries)b
-  ON
-    a.unique_id=b.unique_id1),
-  --
-  --
-  --
-  complete_port_event AS (
-  SELECT
-    event.vessel_id AS vessel_id,
-    event.start_timestamp AS timestamp,
-    anchorage.lat AS lat,
-    anchorage.lon AS lon,
-    anchorage.vessel_lat AS vessel_lat,
-    anchorage.vessel_lon AS vessel_lon,
-    anchorage.anchorage_id AS anchorage_id,
-    'PORT_ENTRY' AS event_type,
-    'PORT_EXIT'AS next_event_type,
-    event.end_timestamp AS next_timestamp,
-    vessel.shipname.value AS main_vessel_shipname,
-    vessel.ssvid AS main_vessel_ssvid,
-    vessel_country.iso3 AS main_vessel_flag,
-    IF (anchorage.label_source = 'top_destination', NULL, anchorage.label) AS anchorage_label,
-    anchorage.top_destination AS anchorage_top_destination,
-    anchorage.iso3 AS anchorage_flag,
-    measures.regions AS regions
-  FROM
-    port_vists AS event
-  LEFT JOIN
-    source_vessel_info AS vessel
-  USING
-    (vessel_id)
-  LEFT JOIN
-    port_entry_merged_info AS anchorage
-  ON
-    event.unique_id = anchorage.unique_id
-  INNER JOIN
-    source_spatial_measures AS measures
-  ON
-    FORMAT("lon:%+07.2f_lat:%+07.2f", ROUND(anchorage.lon/0.01)*0.01, ROUND(anchorage.lat/0.01)*0.01) = measures.gridcode
-  LEFT JOIN
-    source_country_codes AS vessel_country
-  ON
-    SUBSTR(vessel.ssvid, 1, 3) = CAST(vessel_country.code AS string)
-  WHERE
-    TIMESTAMP_DIFF(event.end_timestamp, event.start_timestamp, SECOND)/3600 > {{ min_stop_length }})
-  --
-  -- Finally, generate a unique event id and write out in the normalized event schema
-  --
-SELECT
-  TO_HEX(MD5(FORMAT("%s|%s|%t",event_type, vessel_id, timestamp))) AS event_id,
-  'port' AS event_type,
-  vessel_id,
-  timestamp AS event_start,
-  next_timestamp AS event_end,
-  vessel_lat AS lat_mean,
-  vessel_lon AS lon_mean,
-  lat AS lat_min,
-  lat AS lat_max,
-  lon AS lon_min,
-  lon AS lon_max,
-  TO_JSON_STRING(STRUCT( 
-      ROUND(lat,6) AS anchorage_lat,
-      ROUND(lon,6) AS anchorage_lon,
-      STRUCT(
-        anchorage_id AS `anchorage_id`,
-        generate_port_id(anchorage_flag, anchorage_label) AS `id`,
-        anchorage_label AS `name`,
-        anchorage_top_destination AS `top_destination`,
-        anchorage_flag AS `flag` 
-      ) AS anchorage,
-      STRUCT(
-        regions.eez,
-        regions.fao,
-        regions.rfmo
-      ) AS regions
-  )) AS event_info,
-  TO_JSON_STRING([STRUCT( vessel_id AS `id`,
-      main_vessel_ssvid AS `ssvid`,
-      main_vessel_shipname AS `name`,
-      main_vessel_flag as `flag`)]) AS event_vessels,
-  ST_GEOGFROMTEXT(CONCAT('POINT (', CAST(vessel_lon AS string), ' ', CAST(vessel_lat AS string), ')')) AS event_geography
-FROM
-  complete_port_event
-WHERE
-  lat IS NOT NULL AND lon IS NOT NULL
+        event_start,
+        event_end,
+        lat_mean,
+        lon_mean,
+        lat_min,
+        lat_max,
+        lon_min,
+        lon_max,
+        TO_JSON_STRING(STRUCT(
+            ROUND(lat_mean,6) AS anchorage_lat,
+            ROUND(lon_mean,6) AS anchorage_lon,
+            STRUCT(
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.anchorage_id'), '\"', '') AS `anchorage_id`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.id'), '\"', '') AS `id`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.name'), '\"', '') AS `name`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.top_destination'), '\"', '') AS `top_destination`,
+                REPLACE (JSON_QUERY(mean_anchorage_info, '$.flag'), '\"', '') AS `flag`
+            ) AS anchorage,
+            STRUCT(
+                IF (regions_mean_position IS NULL, [], regions_mean_position.eez) AS eez,
+                IF (regions_mean_position IS NULL, [], regions_mean_position.fao) AS fao,
+                IF (regions_mean_position IS NULL, [], regions_mean_position.rfmo) AS rfmo
+            ) AS regions
+        )) AS event_info,
+        TO_JSON_STRING([STRUCT(
+            vessel_id AS `id`,
+            vessel.ssvid as ssvid,
+            vessel.shipname.value AS name,
+            `world-fishing-827.udfs.mmsi_to_iso3`(ssvid) AS flag
+            )]
+        ) AS event_vessels,
+        ST_GEOGFROMTEXT(CONCAT('POINT (', CAST(lon_mean AS string), ' ', CAST(lat_mean AS string), ')')) AS event_geography
+    FROM port_visit_with_mean_anchorage_info
+        JOIN source_vessel_info vessel USING (vessel_id)

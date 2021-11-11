@@ -10,12 +10,13 @@ WITH
         *
       FROM
         `{{ source_published_loitering_events }}`
+      WHERE event_start BETWEEN '{{ start_date }}' AND '{{ end_date }}'
   ),
   source_segment_info AS (
       SELECT
         *
       FROM
-        {{ segment_info }}`
+        `{{ segment_info }}`
   ),
   source_spatial_measures AS (
       SELECT
@@ -39,7 +40,7 @@ WITH
       SELECT
         *
       FROM
-        {{ named_anchorages }}`
+        `{{ named_anchorages }}`
   ),
   source_segs AS (
       SELECT
@@ -71,6 +72,7 @@ WITH
     ON
         segment_info.ssvid = carrier.ssvid
         AND carrier.year BETWEEN EXTRACT(YEAR FROM loitering.event_start) AND EXTRACT(YEAR FROM loitering.event_end)
+  WHERE TIMESTAMP_DIFF(event_end, event_start, HOUR) >= {{ min_event_hours }}
   ),
 
   --
