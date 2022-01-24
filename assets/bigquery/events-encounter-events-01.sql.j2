@@ -14,7 +14,7 @@ WITH
     SELECT
       *
     FROM
-      `{{ source_table }}`
+     `{{ source_table }}`
   ),
   source_vessel_info AS (
     SELECT
@@ -65,29 +65,12 @@ WITH
     vessel_id
   FROM
     source_voyages
-  CROSS JOIN
-    UNNEST(vessel_ids) AS vessel_id ),
-  --
-  -- Good encounter events, including a preliminary unique event id we'll use
-  -- later to join back to this table
-  --
-  encounters AS (
-  SELECT
-    FORMAT("encounter|%s|%s|%t|%t", vessel_1_id, vessel_2_id, start_time, end_time) AS preliminary_event_id,
-    *
-  FROM
-    source_encounters
-  WHERE
-    TIMESTAMP_DIFF(end_time, start_time, SECOND) > (3600 * 2)
-    AND median_speed_knots < 2),
-  ---
+  ),
   -- Normalize the vessel database so that only registry records in the rfmo
   -- whitelist and overlapping with the vesel activity are included,
   -- extracting only the fields we care about
-  --
   normalized_vessel_database AS (
   SELECT
-    is_carrier,
     identity.ssvid AS ssvid,
     first_timestamp AS activity_first_timestamp,
     last_timestamp AS activity_last_timestamp,
@@ -114,131 +97,182 @@ WITH
     matched
   ),
 
-    --
-  -- Only consider encounters between a carrier and fishing vessel. To
-  -- determine if each vessel is a carrier or a fishing vessel, we need to join
-  -- both vessel id's to the corresponding records in the vessel database and
-  -- in the fishing list. Only keep encounters where one of the vessels is a carrier
-  -- and the other a fishing vessel
+  -- WB: date vessel registry scraped
+  last_scrape AS (
+  SELECT
+    registry_rfmo,
+    MAX(registry_scraped_date) AS last_scrape
+    FROM (
+      SELECT
+    ARRAY(
+      SELECT STRUCT(
+        extract_rfmo_from_list_uvi(list_uvi) AS registry_rfmo,
+        scraped AS registry_scraped_date
+      )
+      FROM
+        UNNEST(registry)
+      WHERE
+        is_whitelisted_rfmo(extract_rfmo_from_list_uvi(list_uvi))
+    ) AS registries
+  FROM
+    source_vessel_database)
+    CROSS JOIN UNNEST (registries)
+    GROUP BY (registry_rfmo)
+  ),
+
+
+  -- WB: set up encounters from published events encounters table
+  -- including getting, vessel id, ssvid, vessel type
+  -- only keep encounters between carrier and fishing vessels or support and fishing vessels
+  -- apply minimum event duration and maximum median speed restrictions
+  encounters AS (
+    SELECT
+        SPLIT(event_id, ".")[ORDINAL(1)] AS preliminary_event_id,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[0].id") as vessel_1_id,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[1].id") as vessel_2_id,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[0].ssvid") as ssvid_1,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[1].ssvid") as ssvid_2,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[0].type") as type_1,
+        JSON_EXTRACT_SCALAR(event_vessels,"$[1].type") as type_2,
+        event_start AS start_time,
+        event_end AS end_time,
+        EXTRACT(year FROM event_start) AS event_year,
+        lat_mean AS mean_latitude,
+        lon_mean AS mean_longitude,
+        CAST(JSON_EXTRACT(event_info, "$.median_speed_knots") AS numeric) AS median_speed_knots
+    FROM
+    source_encounters
+    -- only keep first record of encounter event, as you can pull vessel info on the second vessel in the encounter from the event_vessels
+    WHERE CAST(SPLIT(event_id, ".")[ORDINAL(2)] as numeric) = 1
+        AND (
+            (JSON_EXTRACT_SCALAR(event_vessels,"$[0].type")='carrier' AND JSON_EXTRACT_SCALAR(event_vessels,"$[1].type")='fishing')
+            OR (JSON_EXTRACT_SCALAR(event_vessels,"$[0].type")='fishing' AND JSON_EXTRACT_SCALAR(event_vessels,"$[1].type")='carrier')
+            OR(JSON_EXTRACT_SCALAR(event_vessels,"$[0].type")='support' AND JSON_EXTRACT_SCALAR(event_vessels,"$[1].type")='fishing')
+            OR (JSON_EXTRACT_SCALAR(event_vessels,"$[0].type")='fishing' AND JSON_EXTRACT_SCALAR(event_vessels,"$[1].type")='support')
+        )
+        -- restrictions used in v0
+        AND TIMESTAMP_DIFF(event_end, event_start, SECOND) > (3600 * 2)
+        AND CAST(JSON_EXTRACT(event_info, "$.median_speed_knots") AS numeric) < 2
+  ),
+
+  -- attach registry information
+  encounters_reg AS (
+    SELECT
+      encounters.*,
+      encounters.type_1 = 'carrier' OR encounters.type_1 = 'support' AS vessel_1_is_carrier_or_support_vessel,
+      vessel_database_1.registries AS vessel_1_registries,
+      vessel_database_2.registries AS vessel_2_registries,
+    FROM encounters
+      LEFT JOIN
+        normalized_vessel_database AS vessel_database_1
+      ON
+        encounters.ssvid_1 = vessel_database_1.ssvid
+        AND encounters.start_time between vessel_database_1.activity_first_timestamp and vessel_database_1.activity_last_timestamp
+      LEFT JOIN
+        normalized_vessel_database AS vessel_database_2
+        ON
+        encounters.ssvid_2 = vessel_database_2.ssvid
+        AND encounters.start_time between vessel_database_2.activity_first_timestamp and vessel_database_2.activity_last_timestamp
+  ),
+
+
+  -- WB: label which vessel is the carrier/support vessel and which vessel is the fishing vessel
+  -- xxOnly consider encounters between a carrier and fishing vessel. To
+  -- xxdetermine if each vessel is a carrier or a fishing vessel, we need to join
+  -- xxboth vessel id's to the corresponding records in the vessel database and
+  -- xxin the fishing list. Only keep encounters where one of the vessels is a carrier
+  -- xxand the other a fishing vessel
   --
   carrier_fishing_encounters AS (
-  SELECT
-    encounters.preliminary_event_id,
+      SELECT
+        preliminary_event_id,
+        IF (vessel_1_is_carrier_or_support_vessel,
+          vessel_1_id,
+          vessel_2_id
+        ) AS carrier_vessel_id,
 
-    IF (vessel_database_1.is_carrier,
-      encounters.vessel_1_id,
-      encounters.vessel_2_id
-    ) AS carrier_vessel_id,
+        IF (vessel_1_is_carrier_or_support_vessel,
+          vessel_2_id,
+          vessel_1_id
+        ) as fishing_vessel_id,
 
-    IF (vessel_database_1.is_carrier,
-      encounters.vessel_2_id,
-      encounters.vessel_1_id
-    ) as fishing_vessel_id,
+          IF (vessel_1_is_carrier_or_support_vessel,
+          ssvid_1,
+          ssvid_2
+        ) AS carrier_ssvid,
 
-    IF (vessel_database_1.is_carrier,
-      ARRAY_CONCAT_AGG(vessel_database_1.registries),
-      ARRAY_CONCAT_AGG(vessel_database_2.registries)
-    ) AS carrier_registries,
+        IF (vessel_1_is_carrier_or_support_vessel,
+          ssvid_2,
+          ssvid_1
+        ) as fishing_ssvid,
 
-    IF (vessel_database_1.is_carrier,
-      ARRAY_CONCAT_AGG(vessel_database_2.registries),
-      ARRAY_CONCAT_AGG(vessel_database_1.registries)
-    ) AS fishing_registries,
-  FROM
-    encounters
-  INNER JOIN
-    source_vessel_info AS vessel_info_1
-  ON
-    encounters.vessel_1_id = vessel_info_1.vessel_id
-  INNER JOIN
-    source_vessel_info AS vessel_info_2
-  ON
-    encounters.vessel_2_id = vessel_info_2.vessel_id
-  LEFT JOIN
-    normalized_vessel_database AS vessel_database_1
-  ON
-    vessel_info_1.ssvid = vessel_database_1.ssvid
-    AND encounters.start_time between vessel_database_1.activity_first_timestamp and vessel_database_1.activity_last_timestamp
-  LEFT JOIN
-    normalized_vessel_database AS vessel_database_2
-  ON
-    vessel_info_2.ssvid = vessel_database_2.ssvid
-    AND encounters.start_time between vessel_database_2.activity_first_timestamp and vessel_database_2.activity_last_timestamp
-  LEFT JOIN
-    source_fishing_vessels AS fishing_1
-  ON
-    vessel_info_1.ssvid = fishing_1.ssvid
-    AND EXTRACT(year FROM encounters.start_time) = fishing_1.year
-  LEFT JOIN
-    source_fishing_vessels AS fishing_2
-  ON
-    vessel_info_2.ssvid = fishing_2.ssvid
-    AND EXTRACT(year FROM encounters.start_time) = fishing_2.year
-  WHERE
-    (vessel_database_1.is_carrier AND fishing_2.ssvid IS NOT NULL)
-    OR (vessel_database_2.is_carrier AND fishing_1.ssvid IS NOT NULL)
-  GROUP BY
-    encounters.preliminary_event_id,
-    encounters.vessel_1_id,
-    encounters.vessel_2_id,
-    vessel_database_1.is_carrier,
-    vessel_database_2.is_carrier
+        IF (vessel_1_is_carrier_or_support_vessel,
+          vessel_1_registries,
+          vessel_2_registries
+        ) AS carrier_registries,
+
+        IF (vessel_1_is_carrier_or_support_vessel,
+          vessel_2_registries,
+          vessel_1_registries
+        ) as fishing_registries,
+      FROM
+        encounters_reg
   ),
-    --
-  -- Join back the carrier fishing encounters to the whole list of encounters, discarding those that are not in this set and including the whole encounter information together with the vessel database records
+
+  -- WB: join information linked to carrier and fishing vessels now because to encounter information
+  --
+  -- xxJoin back the carrier fishing encounters to the whole list of encounters,
+  -- xxdiscarding those that are not in this set and including the whole encounter information together with the vessel database records
   --
   filtered_encounters AS (
-  SELECT
-    encounters.*,
-    carrier_vessel_id,
-    fishing_vessel_id,
-    carrier_registries,
-    fishing_registries
-  FROM
-    encounters
-  INNER JOIN
-    carrier_fishing_encounters
-  USING (preliminary_event_id)
+      SELECT
+        encounters_reg.*,
+        carrier_vessel_id,
+        fishing_vessel_id,
+        carrier_registries,
+        fishing_registries
+      FROM
+        encounters_reg
+        INNER JOIN carrier_fishing_encounters USING (preliminary_event_id)
   ),
 
-  --
   -- Calculate the complete list of all vessels involved in the encounters above
-  --
   all_vessels AS (
-  SELECT
-    carrier_vessel_id AS vessel_id,
-    carrier_registries AS registries
-  FROM
-    filtered_encounters
-  UNION ALL
-  SELECT
-    fishing_vessel_id AS vessel_id,
-    fishing_registries AS registries
-  FROM
-    filtered_encounters
+      SELECT
+        carrier_vessel_id AS vessel_id,
+        carrier_registries AS registries
+      FROM
+        carrier_fishing_encounters
+      UNION ALL
+      SELECT
+        fishing_vessel_id AS vessel_id,
+        fishing_registries AS registries
+      FROM
+        carrier_fishing_encounters
   ),
+
   --
   -- Calculate authorization data for each vessel, only getting authorization
   -- data for the whitelisted RFMO's
   --
   authorizations AS (
-  SELECT
-    vessel_id,
-    registry_rfmo,
-    registry_authorized_from,
-    registry_authorized_to
-  FROM
-    all_vessels
-  CROSS JOIN
-    UNNEST(registries) AS registry
-  WHERE
-    registry_authorized_from IS NOT NULL
-    AND registry_authorized_to IS NOT NULL
-  GROUP BY
-    vessel_id,
-    registry_rfmo,
-    registry_authorized_from,
-    registry_authorized_to
+      SELECT
+        vessel_id,
+        registry_rfmo,
+        registry_authorized_from,
+        registry_authorized_to
+      FROM
+        all_vessels
+      CROSS JOIN
+        UNNEST(registries) AS registry
+      WHERE
+        registry_authorized_from IS NOT NULL
+        AND registry_authorized_to IS NOT NULL
+      GROUP BY
+        vessel_id,
+        registry_rfmo,
+        registry_authorized_from,
+        registry_authorized_to
   ),
   --
   -- Include additional information on the final event, such as basic vessel
@@ -246,201 +280,219 @@ WITH
   -- spatial information
   --
   complete_encounter_event AS (
-  SELECT
-    encounter.*,
-    -- Everything about the carrier vessel
-    carrier_vessel.shipname.value AS carrier_shipname,
-    carrier_vessel.ssvid AS carrier_ssvid,
-    carrier_vessel_country.iso3 AS carrier_flag,
-    carrier_vessel_trip_start_anchorages.s2id AS carrier_trip_start_anchorage_id,
-    carrier_vessel_trip_start_anchorages.iso3 AS carrier_trip_start_iso3,
-    carrier_vessel_trip_start_anchorages.label AS carrier_trip_start_label,
-    carrier_vessel_trip_end_anchorages.s2id AS carrier_trip_end_anchorage_id,
-    carrier_vessel_trip_end_anchorages.iso3 AS carrier_trip_end_iso3,
-    carrier_vessel_trip_end_anchorages.label AS carrier_trip_end_label,
-    -- Everything about the fishing vessel
-    fishing_vessel.shipname.value AS fishing_shipname,
-    fishing_vessel.ssvid AS fishing_ssvid,
-    fishing_vessel_country.iso3 AS fishing_flag,
-    fishing_vessel_trip_start_anchorages.s2id AS fishing_trip_start_anchorage_id,
-    fishing_vessel_trip_start_anchorages.iso3 AS fishing_trip_start_iso3,
-    fishing_vessel_trip_start_anchorages.label AS fishing_trip_start_label,
-    fishing_vessel_trip_end_anchorages.s2id AS fishing_trip_end_anchorage_id,
-    fishing_vessel_trip_end_anchorages.iso3 AS fishing_trip_end_iso3,
-    fishing_vessel_trip_end_anchorages.label AS fishing_trip_end_label,
-    -- Regional information
-    measures.distance_from_shore_m AS distance_from_shore_m,
-    measures.distance_from_port_m AS distance_from_port_m,
-    measures.elevation_m AS elevation_m,
-    measures.regions AS regions
-  FROM
-    filtered_encounters AS encounter
-  INNER JOIN
-    source_spatial_measures AS measures
-  ON
-    FORMAT("lon:%+07.2f_lat:%+07.2f", ROUND(encounter.mean_longitude/0.01)*0.01, ROUND(encounter.mean_latitude/0.01)*0.01) = measures.gridcode
-    AND measures.distance_from_port_m > 10000
-  INNER JOIN
-    source_vessel_info AS carrier_vessel
-  ON
-    carrier_vessel.vessel_id = encounter.carrier_vessel_id
-  INNER JOIN
-    source_country_codes AS carrier_vessel_country
-  ON
-    SUBSTR(carrier_vessel.ssvid, 1, 3) = CAST(carrier_vessel_country.code AS string)
-  LEFT JOIN
-    flattened_voyages AS carrier_vessel_voyages
-  ON
-    carrier_vessel.vessel_id = carrier_vessel_voyages.vessel_id
-    AND carrier_vessel_voyages.trip_start < encounter.start_time
-    AND carrier_vessel_voyages.trip_end > encounter.end_time
-  LEFT JOIN
-    source_named_anchorages AS carrier_vessel_trip_start_anchorages
-  ON
-    carrier_vessel_voyages.trip_start_anchorage_id = carrier_vessel_trip_start_anchorages.s2id
-  LEFT JOIN
-    source_named_anchorages AS carrier_vessel_trip_end_anchorages
-  ON
-    carrier_vessel_voyages.trip_end_anchorage_id = carrier_vessel_trip_end_anchorages.s2id
-  INNER JOIN
-    source_vessel_info AS fishing_vessel
-  ON
-    fishing_vessel.vessel_id = encounter.fishing_vessel_id
-  INNER JOIN
-    source_country_codes AS fishing_vessel_country
-  ON
-    SUBSTR(fishing_vessel.ssvid, 1, 3) = CAST(fishing_vessel_country.code AS string)
-  LEFT JOIN
-    flattened_voyages AS fishing_vessel_voyages
-  ON
-    fishing_vessel.vessel_id = fishing_vessel_voyages.vessel_id
-    AND fishing_vessel_voyages.trip_start < encounter.start_time
-    AND fishing_vessel_voyages.trip_end > encounter.end_time
-  LEFT JOIN
-    source_named_anchorages AS fishing_vessel_trip_start_anchorages
-  ON
-    fishing_vessel_voyages.trip_start_anchorage_id = fishing_vessel_trip_start_anchorages.s2id
-  LEFT JOIN
-    source_named_anchorages AS fishing_vessel_trip_end_anchorages
-  ON
-    fishing_vessel_voyages.trip_end_anchorage_id = fishing_vessel_trip_end_anchorages.s2id ),
+      SELECT
+        encounter.*,
+        -- Everything about the carrier vessel
+        carrier_vessel.shipname.value AS carrier_shipname,
+        carrier_vessel.ssvid AS carrier_ssvid,
+        carrier_vessel_country.iso3 AS carrier_flag,
+        carrier_vessel_trip_start_anchorages.s2id AS carrier_trip_start_anchorage_id,
+        carrier_vessel_trip_start_anchorages.iso3 AS carrier_trip_start_iso3,
+        carrier_vessel_trip_start_anchorages.label AS carrier_trip_start_label,
+        carrier_vessel_trip_end_anchorages.s2id AS carrier_trip_end_anchorage_id,
+        carrier_vessel_trip_end_anchorages.iso3 AS carrier_trip_end_iso3,
+        carrier_vessel_trip_end_anchorages.label AS carrier_trip_end_label,
+        -- Everything about the fishing vessel
+        fishing_vessel.shipname.value AS fishing_shipname,
+        fishing_vessel.ssvid AS fishing_ssvid,
+        fishing_vessel_country.iso3 AS fishing_flag,
+        fishing_vessel_trip_start_anchorages.s2id AS fishing_trip_start_anchorage_id,
+        fishing_vessel_trip_start_anchorages.iso3 AS fishing_trip_start_iso3,
+        fishing_vessel_trip_start_anchorages.label AS fishing_trip_start_label,
+        fishing_vessel_trip_end_anchorages.s2id AS fishing_trip_end_anchorage_id,
+        fishing_vessel_trip_end_anchorages.iso3 AS fishing_trip_end_iso3,
+        fishing_vessel_trip_end_anchorages.label AS fishing_trip_end_label,
+        -- Regional information
+        measures.distance_from_shore_m AS distance_from_shore_m,
+        measures.distance_from_port_m AS distance_from_port_m,
+        measures.elevation_m AS elevation_m,
+        measures.regions AS regions
+      FROM
+        filtered_encounters AS encounter
+      INNER JOIN
+        source_spatial_measures AS measures
+      ON
+        FORMAT("lon:%+07.2f_lat:%+07.2f", ROUND(encounter.mean_longitude/0.01)*0.01, ROUND(encounter.mean_latitude/0.01)*0.01) = measures.gridcode
+        AND measures.distance_from_port_m > 10000
+      INNER JOIN
+        source_vessel_info AS carrier_vessel
+      ON
+        carrier_vessel.vessel_id = encounter.carrier_vessel_id
+      INNER JOIN
+        source_country_codes AS carrier_vessel_country
+      ON
+        SUBSTR(carrier_vessel.ssvid, 1, 3) = CAST(carrier_vessel_country.code AS string)
+      LEFT JOIN
+        flattened_voyages AS carrier_vessel_voyages
+      ON
+        carrier_vessel.vessel_id = carrier_vessel_voyages.vessel_id
+        AND carrier_vessel_voyages.trip_start < encounter.start_time
+        AND carrier_vessel_voyages.trip_end > encounter.end_time
+      LEFT JOIN
+        source_named_anchorages AS carrier_vessel_trip_start_anchorages
+      ON
+        carrier_vessel_voyages.trip_start_anchorage_id = carrier_vessel_trip_start_anchorages.s2id
+      LEFT JOIN
+        source_named_anchorages AS carrier_vessel_trip_end_anchorages
+      ON
+        carrier_vessel_voyages.trip_end_anchorage_id = carrier_vessel_trip_end_anchorages.s2id
+      INNER JOIN
+        source_vessel_info AS fishing_vessel
+      ON
+        fishing_vessel.vessel_id = encounter.fishing_vessel_id
+      INNER JOIN
+        source_country_codes AS fishing_vessel_country
+      ON
+        SUBSTR(fishing_vessel.ssvid, 1, 3) = CAST(fishing_vessel_country.code AS string)
+      LEFT JOIN
+        flattened_voyages AS fishing_vessel_voyages
+      ON
+        fishing_vessel.vessel_id = fishing_vessel_voyages.vessel_id
+        AND fishing_vessel_voyages.trip_start < encounter.start_time
+        AND fishing_vessel_voyages.trip_end > encounter.end_time
+      LEFT JOIN
+        source_named_anchorages AS fishing_vessel_trip_start_anchorages
+      ON
+        fishing_vessel_voyages.trip_start_anchorage_id = fishing_vessel_trip_start_anchorages.s2id
+      LEFT JOIN
+        source_named_anchorages AS fishing_vessel_trip_end_anchorages
+      ON
+        fishing_vessel_voyages.trip_end_anchorage_id = fishing_vessel_trip_end_anchorages.s2id
+  ),
+
   --
   -- Flatten and filter the regions where the encounters happen, so that we end
   -- up with a table with multiple records per each encounter, one per rfmo
   -- region where the encounter happened when the region is one of the
   -- interesting rfmos, including authorization status for each of those
   -- regions for both vessels involved.
-  --
+  -- WB: add attribute for if encounter date is before or after last vessel registry scrape
   encounter_regions_with_authorizations AS (
-  SELECT
-    encounters.preliminary_event_id,
-    rfmo,
-    carrier_vessel_authorization.registry_rfmo IS NOT NULL AS carrier_vessel_is_authorized,
-    fishing_vessel_authorization.registry_rfmo IS NOT NULL AS fishing_vessel_is_authorized
-  FROM
-    complete_encounter_event AS encounters
-  CROSS JOIN
-    UNNEST(encounters.regions.rfmo) AS rfmo
-  LEFT JOIN
-    authorizations AS carrier_vessel_authorization
-  ON
-    encounters.carrier_vessel_id = carrier_vessel_authorization.vessel_id
-    AND rfmo = carrier_vessel_authorization.registry_rfmo
-    AND encounters.start_time < carrier_vessel_authorization.registry_authorized_to
-    AND encounters.end_time > carrier_vessel_authorization.registry_authorized_from
-  LEFT JOIN
-    authorizations AS fishing_vessel_authorization
-  ON
-    encounters.fishing_vessel_id = fishing_vessel_authorization.vessel_id
-    AND rfmo = fishing_vessel_authorization.registry_rfmo
-    AND encounters.start_time < fishing_vessel_authorization.registry_authorized_to
-    AND encounters.end_time > fishing_vessel_authorization.registry_authorized_from
-  WHERE
-    is_whitelisted_rfmo(rfmo)
-  GROUP BY
-    encounters.preliminary_event_id,
-    rfmo,
-    carrier_vessel_is_authorized,
-    fishing_vessel_is_authorized),
+      SELECT
+        encounters.preliminary_event_id,
+        rfmo,
+        carrier_vessel_authorization.registry_rfmo IS NOT NULL AS carrier_vessel_is_authorized,
+        fishing_vessel_authorization.registry_rfmo IS NOT NULL AS fishing_vessel_is_authorized,
+        -- WB: add in attribute indicating if encounter occured after last vessel registry scrape
+        last_scrape.last_scrape IS NOT NULL AS event_after_last_scrape
+      FROM
+        complete_encounter_event AS encounters
+      CROSS JOIN
+        UNNEST(encounters.regions.rfmo) AS rfmo
+      LEFT JOIN
+        authorizations AS carrier_vessel_authorization
+      ON
+        encounters.carrier_vessel_id = carrier_vessel_authorization.vessel_id
+        AND rfmo = carrier_vessel_authorization.registry_rfmo
+        AND encounters.start_time < carrier_vessel_authorization.registry_authorized_to
+        AND encounters.end_time > carrier_vessel_authorization.registry_authorized_from
+      LEFT JOIN
+        authorizations AS fishing_vessel_authorization
+      ON
+        encounters.fishing_vessel_id = fishing_vessel_authorization.vessel_id
+        AND rfmo = fishing_vessel_authorization.registry_rfmo
+        AND encounters.start_time < fishing_vessel_authorization.registry_authorized_to
+        AND encounters.end_time > fishing_vessel_authorization.registry_authorized_from
+      LEFT JOIN
+        last_scrape AS last_scrape
+      ON
+        rfmo = last_scrape.registry_rfmo
+        AND encounters.start_time > last_scrape.last_scrape
+      WHERE
+        is_whitelisted_rfmo(rfmo)
+      GROUP BY
+        encounters.preliminary_event_id,
+        rfmo,
+        carrier_vessel_is_authorized,
+        fishing_vessel_is_authorized,
+        event_after_last_scrape
+  ),
+
   --
   -- Calculate the final encounter authorization status. An encounter is only
   -- authorized if it's authorized for the carrier vessel in all the rfmos, if it
   -- happened outside an rfmo or in an rfmo we are not interested about.
-  --
+  -- WB: add attribute if encounter occured before or after last registry scrape
   encounter_authorizations AS (
-  SELECT
-    encounters.preliminary_event_id,
-    -- Here we decide if the encounter is authorized or not. The rfmo field
-    -- contains a non-null value if the encounter happened inside one of the
-    -- interesting rfmos:
-    --
-    --  * if all the records for a given event_id have null rfmo then that
-    --  means that it's an encounter happening outside of the interesting
-    --  rfmos, so it's authorized.
-    --
-    --  * If all the records for a given event_id have all fields with non-null
-    --  values, it happened inside one or more rfmos of the interesting rfmos
-    --  and all the involved vessels were authorized.
-    --
-    --  * Any other case means it's an unauthorized encounter
-    (
-      LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
-      LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
-    ) AS is_authorized,
-    -- We also compute authorization status. We are talking about 3 different
-    -- values here:
-    --
-    --  * An encounter can be authorized on the same conditions as before.
-    --
-    --  * An encounter is unauthorized if the carrier vessel is not authorized
-    --  in all of the regions it is happening in.
-    --
-    --  * An encounter can be partially authorized if the carrier is authorized
-    --  in some of the regions it is happening in but not all of them
-    CASE
-      WHEN (
-        LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
-        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
-      ) THEN 'authorized'
-      WHEN (
-        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND NOT encounter_authorizations.carrier_vessel_is_authorized)
-      ) THEN 'unauthorized'
-      ELSE
-      'partial'
-    END AS authorization_status,
-    -- Finally, we need to compute per-region, per-vessel authorization status. For each
-    -- authorization record in this event, we generate a struct containing the
-    -- name of the region and the authorization status for each vessel.
-    ARRAY_AGG(STRUCT(
-        encounter_authorizations.rfmo AS `rfmo`,
-        encounter_authorizations.carrier_vessel_is_authorized AS `is_authorized`)) AS carrier_vessel_region_authorizations,
-    ARRAY_AGG(STRUCT(
-        encounter_authorizations.rfmo AS `rfmo`,
-        encounter_authorizations. fishing_vessel_is_authorized AS `is_authorized`)) AS fishing_vessel_region_authorizations
-  FROM
-    complete_encounter_event AS encounters
-  LEFT JOIN
-    encounter_regions_with_authorizations AS encounter_authorizations
-  USING
-    (preliminary_event_id)
-  GROUP BY
-    preliminary_event_id),
+      SELECT
+        encounters.preliminary_event_id,
+        encounter_authorizations.event_after_last_scrape,
+        -- Here we decide if the encounter is authorized or not. The rfmo field
+        -- contains a non-null value if the encounter happened inside one of the
+        -- interesting rfmos:
+        --
+        --  * if all the records for a given event_id have null rfmo then that
+        --  means that it's an encounter happening outside of the interesting
+        --  rfmos, so it's authorized.
+        --
+        --  * If all the records for a given event_id have all fields with non-null
+        --  values, it happened inside one or more rfmos of the interesting rfmos
+        --  and all the involved vessels were authorized.
+        --
+        --  * Any other case means it's an unauthorized encounter
+        (
+          LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
+          LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
+        ) AS is_authorized,
+        -- We also compute authorization status. We are talking about 3 different
+        -- values here:
+        --
+        --  * An encounter can be authorized on the same conditions as before.
+        --
+        --  * An encounter is unauthorized if the carrier vessel is not authorized
+        --  in all of the regions it is happening in.
+        --
+        --  * An encounter can be partially authorized if the carrier is authorized
+        --  in some of the regions it is happening in but not all of them
+        CASE
+          WHEN (
+            LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
+            LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
+          ) THEN 'authorized'
+          WHEN (
+            LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND NOT encounter_authorizations.carrier_vessel_is_authorized)
+          ) THEN 'unauthorized'
+          ELSE
+          'partial'
+        END AS authorization_status,
+        -- Finally, we need to compute per-region, per-vessel authorization status. For each
+        -- authorization record in this event, we generate a struct containing the
+        -- name of the region and the authorization status for each vessel.
+        ARRAY_AGG(STRUCT(
+            encounter_authorizations.rfmo AS `rfmo`,
+            encounter_authorizations.carrier_vessel_is_authorized AS `is_authorized`)) AS carrier_vessel_region_authorizations,
+        ARRAY_AGG(STRUCT(
+            encounter_authorizations.rfmo AS `rfmo`,
+            encounter_authorizations. fishing_vessel_is_authorized AS `is_authorized`)) AS fishing_vessel_region_authorizations
+      FROM
+        complete_encounter_event AS encounters
+      LEFT JOIN
+        encounter_regions_with_authorizations AS encounter_authorizations
+      USING
+        (preliminary_event_id)
+      GROUP BY
+        preliminary_event_id,
+        event_after_last_scrape
+  ),
+
   --
   -- Join the original encounters each with their authorization status.
   --
   complete_encounter_with_authorizations AS (
-  SELECT
-    encounter.*,
-    authorization.is_authorized,
-    authorization.authorization_status,
-    authorization.carrier_vessel_region_authorizations,
-    authorization.fishing_vessel_region_authorizations
-  FROM
-    complete_encounter_event AS encounter
-  INNER JOIN
-    encounter_authorizations AS authorization
-  USING
-    (preliminary_event_id))
+      SELECT
+        encounter.*,
+        authorization.event_after_last_scrape,
+        authorization.is_authorized,
+        authorization.authorization_status,
+        authorization.carrier_vessel_region_authorizations,
+        authorization.fishing_vessel_region_authorizations
+      FROM
+        complete_encounter_event AS encounter
+      INNER JOIN
+        encounter_authorizations AS authorization
+      USING
+        (preliminary_event_id)
+  )
 
 SELECT
   *
