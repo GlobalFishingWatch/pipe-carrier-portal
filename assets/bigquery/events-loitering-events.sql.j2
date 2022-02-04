@@ -50,9 +50,10 @@ WITH
   ),
 
   source_carriers AS (
-    SELECT year, mmsi AS ssvid
+    SELECT year, ssvid
     FROM
-        `{{ carrier_vessels_byyear_v }}`
+        `{{ all_vessels_byyear_v }}`
+    WHERE class = 'carrier'
   ),
 
   --

@@ -139,6 +139,7 @@ WITH
         EXTRACT(year FROM event_start) AS event_year,
         lat_mean AS mean_latitude,
         lon_mean AS mean_longitude,
+        CAST(JSON_EXTRACT(event_info, "$.median_distance_km") AS numeric) AS median_distance_km,
         CAST(JSON_EXTRACT(event_info, "$.median_speed_knots") AS numeric) AS median_speed_knots
     FROM
     source_encounters
