@@ -12,7 +12,7 @@ ARGS=( \
   COUNTRY_CODES \
   VOYAGES \
   NAMED_ANCHORAGES \
-  FISHING_VESSELS \
+  ALL_VESSELS_BY_YEAR_V \
   MAX_MEDIAN_SPEED_KNOTS \
   TEMP_DATASET
   DEST_TABLE \
@@ -78,7 +78,7 @@ jinja2 ${SQL} \
   -D country_codes=${COUNTRY_CODES//:/.} \
   -D voyages=${VOYAGES//:/.} \
   -D named_anchorages=${NAMED_ANCHORAGES//:/.} \
-  -D fishing_vessels=${FISHING_VESSELS//:/.} \
+  -D all_vessels_byyear_v=${ALL_VESSELS_BY_YEAR_V//:/.} \
   -D max_median_speed_knots=${MAX_MEDIAN_SPEED_KNOTS} \
   | bq query --max_rows=0 --allow_large_results --replace --destination_table ${INTERMEDIATE_TABLE}
 

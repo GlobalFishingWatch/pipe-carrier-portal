@@ -47,7 +47,8 @@ WITH
     SELECT
       *
     FROM
-      `{{ fishing_vessels }}`
+      `{{ all_vessels_byyear_v }}`
+    WHERE class = 'fishing'
   ),
 
   source_spatial_measures AS (
