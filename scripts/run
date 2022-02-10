@@ -4,13 +4,16 @@ THIS_SCRIPT_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 
 display_usage() {
 	echo "Available Commands"
-	echo "  generate_carrier_encounter_events  publish carrier-specific encounter (vessel rendevouz at sea between a carrier and a fishing vessel) events"
-	echo "  generate_carrier_loitering_events  publish carrier-specific loitering (carrier vessel drifting at sea) events"
-	echo "  generate_carrier_anchorage_events  publish carrier-specific anchorage (carrier docking at anchorage) events"
-	echo "  publish_vessel_tracks              publish tracks of vessels related to the carrier portal to postgres"
-	echo "  publish_vessel_info                export the vessel information related to carrier portal vessels to elastic search"
-  echo "  publish_events_postgres            publish events of a given bigquery table to a postgres database"
-  echo "  publish_events_gcs                 publish events of a given bigquery table to CSV files in a GCS bucket"
+	echo "  generate_carrier_encounter_events                publish carrier-specific encounter (vessel rendevouz at sea between a carrier and a fishing vessel) events"
+	echo "  generate_carrier_encounter_events_compare_table  publish carrier-specific encounter (vessel rendevouz at sea between a carrier and a fishing vessel) events"
+	echo "  generate_carrier_loitering_events                publish carrier-specific loitering (carrier vessel drifting at sea) events"
+	echo "  generate_carrier_loitering_events_compare table  publish carrier-specific loitering (carrier vessel drifting at sea) events"
+	echo "  generate_carrier_anchorage_events                publish carrier-specific anchorage (carrier docking at anchorage) events"
+	echo "  generate_carrier_anchorage_events_compare_table  publish carrier-specific anchorage (carrier docking at anchorage) events"
+	echo "  publish_vessel_tracks                            publish tracks of vessels related to the carrier portal to postgres"
+	echo "  publish_vessel_info                              export the vessel information related to carrier portal vessels to elastic search"
+  echo "  publish_events_postgres                          publish events of a given bigquery table to a postgres database"
+  echo "  publish_events_gcs                               publish events of a given bigquery table to CSV files in a GCS bucket"
 	}
 
 
@@ -27,12 +30,24 @@ case $1 in
     ${THIS_SCRIPT_DIR}/generate_carrier_encounter_events "${@:2}"
     ;;
 
+  generate_carrier_encounter_events_compare_table)
+    ${THIS_SCRIPT_DIR}/generate_carrier_encounter_events_compare_table "${@:2}"
+    ;;
+
   generate_carrier_loitering_events)
     ${THIS_SCRIPT_DIR}/generate_carrier_loitering_events "${@:2}"
     ;;
 
+  generate_carrier_loitering_events_compare_table)
+    ${THIS_SCRIPT_DIR}/generate_carrier_loitering_events_compare_table "${@:2}"
+    ;;
+
   generate_carrier_anchorage_events)
     ${THIS_SCRIPT_DIR}/generate_carrier_anchorage_events "${@:2}"
+    ;;
+
+  generate_carrier_anchorage_events_compare_table)
+    ${THIS_SCRIPT_DIR}/generate_carrier_anchorage_events_compare_table "${@:2}"
     ;;
 
   publish_vessel_tracks)
