@@ -462,14 +462,28 @@ WITH
   -- regions for both vessels involved.
   -- WB: add attribute for if encounter date is before or after last vessel registry scrape
   encounter_regions_with_authorizations AS (
-      SELECT
-        encounters.preliminary_event_id,
-        encounters.published_event_id,
-        rfmo,
-        carrier_vessel_authorization.registry_rfmo IS NOT NULL AS carrier_vessel_is_authorized,
-        fishing_vessel_authorization.registry_rfmo IS NOT NULL AS fishing_vessel_is_authorized,
-        -- WB: add in attribute indicating if encounter occured after last vessel registry scrape
-        last_scrape.last_scrape IS NOT NULL AS event_after_last_scrape
+-------UPDATED 2/11/22*******
+    SELECT
+    encounters.preliminary_event_id,
+    encounters.published_event_id,
+    rfmo,
+    -- NEW WILLA: changed from boolean to true, false, or pending if false and after last scrape
+    CASE 
+      WHEN carrier_vessel_authorization.registry_rfmo IS NOT NULL THEN 'true'
+      WHEN carrier_vessel_authorization.registry_rfmo IS NULL AND last_scrape.last_scrape IS NULL THEN 'false'
+      ELSE 'pending' END
+       AS carrier_vessel_is_authorized,
+    CASE 
+      WHEN fishing_vessel_authorization.registry_rfmo IS NOT NULL THEN 'true'
+      WHEN fishing_vessel_authorization.registry_rfmo IS NULL AND last_scrape.last_scrape IS NULL THEN 'false'
+      ELSE 'pending' END
+       AS fishing_vessel_is_authorized,
+    -- NEW WILLA: the old code
+    --carrier_vessel_authorization.registry_rfmo IS NOT NULL AS carrier_vessel_is_authorized,
+    --fishing_vessel_authorization.registry_rfmo IS NOT NULL AS fishing_vessel_is_authorized,
+    -- WB: add in attribute indicating if encounter occured after last vessel registry scrape
+    last_scrape.last_scrape IS NOT NULL AS event_after_last_scrape
+-----*****************
       FROM
         complete_encounter_event AS encounters
       CROSS JOIN
@@ -540,19 +554,25 @@ WITH
       --
       --  * An encounter can be partially authorized if the carrier is authorized
       --  in some of the regions it is happening in but not all of them
+-----------UPDATE 2/11/22********************
       CASE
-        WHEN (
-          LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
-          LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
-        ) THEN 'authorized'
-        WHEN (
-          LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND NOT encounter_authorizations.event_after_last_scrape AND NOT encounter_authorizations.carrier_vessel_is_authorized)
-        ) THEN 'unauthorized'
-        WHEN (
-          LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.event_after_last_scrape AND NOT encounter_authorizations.carrier_vessel_is_authorized)
-        ) THEN 'pending'
-        ELSE 'partial'
-      END AS authorization_status,
+    -- NEW WILLA: changed from boolean "encounter_authorizations.carrier_vessel_is_authorized" to adding " = 'true'"
+    -- there are new a few double negatives, and we could simplify logic now that we have a 'pending' option
+    -- but to reduce the number of changes to the original code, I've left everything essentially
+      WHEN (
+        LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
+        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized = 'true')
+      ) THEN 'authorized'
+      WHEN (
+        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND NOT encounter_authorizations.event_after_last_scrape AND NOT encounter_authorizations.carrier_vessel_is_authorized = 'true')
+      ) THEN 'unauthorized'
+       WHEN (
+        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.event_after_last_scrape AND NOT encounter_authorizations.carrier_vessel_is_authorized = 'true')
+      ) THEN 'pending'
+      ELSE
+      'partial'
+    END AS authorization_status,
+-----------***********
       -- Finally, we need to compute per-region, per-vessel authorization status. For each
       -- authorization record in this event, we generate a struct containing the
       -- name of the region and the authorization status for each vessel.
