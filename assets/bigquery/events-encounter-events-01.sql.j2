@@ -542,7 +542,7 @@ WITH
       --  * Any other case means it's an unauthorized encounter
       (
         LOGICAL_AND(encounter_authorizations.rfmo IS NULL) OR
-        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized)
+        LOGICAL_AND(encounter_authorizations.rfmo IS NOT NULL AND encounter_authorizations.carrier_vessel_is_authorized = 'true')
       ) AS is_authorized,
       -- We also compute authorization status. We are talking about 3 different
       -- values here:
