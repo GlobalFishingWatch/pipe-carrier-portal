@@ -28,7 +28,7 @@ DEPENDENCIES = [
     "pipe-tools==3.1.2",
     "jinja2-cli",
     "statistics",
-    "elasticsearch",
+    "elasticsearch=7.17.0",
 ]
 
 with codecs.open('README.md', encoding='utf-8') as f:
