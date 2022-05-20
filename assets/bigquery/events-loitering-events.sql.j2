@@ -53,7 +53,7 @@ WITH
     SELECT year, ssvid
     FROM
         `{{ all_vessels_byyear_v }}`
-    WHERE class = 'carrier'
+    WHERE shiptype = 'carrier'
   ),
 
   --
