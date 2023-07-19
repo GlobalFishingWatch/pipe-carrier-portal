@@ -25,7 +25,6 @@ DEPENDENCIES = [
     "pytz",
     "udatetime",
     "newlinejson",
-    "pipe-tools==3.1.2",
     "jinja2-cli",
     "statistics",
     "elasticsearch==7.8.1",
