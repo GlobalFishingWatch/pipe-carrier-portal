@@ -106,7 +106,7 @@ echo "  Downloaded records from ${TEMP_EXTRACT_PATH}"
 echo "Loading data into Elastic Search"
 ELASTIC_SEARCH_INDEX_MAPPINGS=$(cat $ASSETS/elasticsearch/mappings.json)
 zcat ${LOCAL_JSON_PATH}/*.json.gz \
-  | python -u -m pipe_carrier_portal.elasticsearch.importer $ELASTIC_SEARCH_SERVER_URL $ELASTIC_SEARCH_SERVER_AUTH $ELASTIC_SEARCH_INDEX_ALIAS "$ELASTIC_SEARCH_INDEX_MAPPINGS"
+  | python3 -u -m pipe_carrier_portal.elasticsearch.importer $ELASTIC_SEARCH_SERVER_URL $ELASTIC_SEARCH_SERVER_AUTH $ELASTIC_SEARCH_INDEX_ALIAS "$ELASTIC_SEARCH_INDEX_MAPPINGS"
 if [ "$?" -ne 0 ]; then
   echo "  Unable to load data into Elastic Search"
   exit 1

@@ -102,7 +102,7 @@ if [ "$?" -ne 0 ]; then
   exit 1
 fi
 echo "  Converting json events to csv format using script ${DEST_EVENT_TYPE}"
-cat ${LOCAL_JSON_PATH}/*.json | python -m pipe_carrier_portal.downloadables.${DEST_EVENT_TYPE} ${LOCAL_CSV_FILE}
+cat ${LOCAL_JSON_PATH}/*.json | python3 -m pipe_carrier_portal.downloadables.${DEST_EVENT_TYPE} ${LOCAL_CSV_FILE}
 if [ "$?" -ne 0 ]; then
   echo "  Unable to convert events from JSON to CSV format"
   exit 1
