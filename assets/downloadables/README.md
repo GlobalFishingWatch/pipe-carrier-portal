@@ -2,6 +2,9 @@
 
 ## Description
 
+`IMPORTANT` Carrier Vessel Portal was released in 2017. We are currently working on integrating the Carrier Vessel Portal features into the main Global Fishing Watch platform, which has more updated data and technology. This will allow us to streamline our data and enhance how users will be able to explore potential transshipment information.
+We are planning releases throughout 2025 to ensure the key functionalities are incorporated and that the transition between the current and integrated version of the Carrier Vessel Portal is as seamless as possible. **Therefore this data won't be updated until the full migration is done.**
+
 Data from the [Carrier Vessel Portal](https://globalfishingwatch.org/carrier-portal/) public portal to help policymakers and fishery managers better understand the activity of carriers, refrigerated cargo vessels that can support the transfer of fish from commercial fishing vessels out at sea and delivery of fish to ports for processing worldwide.
 
 The Carrier Vessel Portal utilizes AIS data to show the historical activity of carriers, including port visits, loitering and encounter events, as well as tuna RFMOs authorization for both carriers and fishing vessels to enable the user a full picture of carrier patterns. 
@@ -120,3 +123,8 @@ These are the columns that are included in the CSV files:
 
 * `port.name`: Name for the port where the vessel docked. Only available in port events.
 
+## License
+Copyright Global Fishing Watch. Non-Commercial Use Only. The Site and the Services are provided for Non-Commercial use only in accordance with the [CC BY-NC 4.0 license](https://creativecommons.org/licenses/by-nc/4.0/). If you would like to use the Site and/or the Services for commercial purposes, please contact us at support@globalfishingwatch.org . See also our [Terms of Use](https://globalfishingwatch.org/terms-of-use/)
+
+## Suggested Citation
+Global Fishing Watch. 2025, updated daily. Carrier Vessel Portal events v20201001. Data set accessed YYYY-MM-DD”
